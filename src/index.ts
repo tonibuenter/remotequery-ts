@@ -1,4 +1,3 @@
-import { addService } from "./remotequery";
-
+import { addService } from './remotequery';
 
 export { addService };

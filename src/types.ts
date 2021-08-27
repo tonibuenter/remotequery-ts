@@ -38,3 +38,11 @@ export type Result = {
 export type EmtpyResult = {};
 
 export type CondResult = Result | EmtpyResult;
+
+export type RegistryType = any;
+
+export type CommandsType = {
+  StartBlock?: any;
+  EndBlock?: any;
+  Registry?: RegistryType;
+};

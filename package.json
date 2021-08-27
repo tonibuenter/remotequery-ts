@@ -1,19 +1,24 @@
 {
   "name": "remotequery-ts",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "0.0.1",
+  "description": "Remotequery for TypeScript",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare" : "npm run build",
+    "prepublishOnly": "npm run lint",
     "build": "tsc",
     "format": "prettier --write \"src/**/*.ts\" \"src/**/*.js\"",
     "lint": "tslint -p tsconfig.json"
-  },"repository": {
+  },
+  "repository": {
     "type": "git",
     "url": "git+https://github.com/tonibuenter/remotequery-ts.git"
   },
-  "keywords": [],
-  "author": "",
+  "files": ["lib/**/*"],
+  "keywords": ["SQL", "Persistence"],
+  "author": "Toni A. Buenter",
   "license": "ISC",
   "dependencies": {
     "chai": "^4.3.4",
@@ -31,6 +36,8 @@
     "eslint-plugin-prettier": "^3.4.1",
     "prettier": "^2.3.2",
     "ts-node": "^10.2.1",
+    "tslint": "^6.1.3",
+    "tslint-config-prettier": "^1.18.0",
     "typescript": "^4.3.5"
   }
 }
