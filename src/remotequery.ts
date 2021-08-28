@@ -1,10 +1,21 @@
 /* WELCOME TO REMOTEQUERY for NODE JS */
 /* tslint:disable:no-string-literal */
+/* eslint-disable @typescript-eslint/no-explicit-any,@typescript-eslint/explicit-module-boundary-types */
 
 import * as pino from 'pino';
 import * as fs from 'fs';
-import memoize from 'fast-memoize';
-import { CommandsType, CondResult, Context, Request, Result, ServiceEntry, StatementNode } from './types';
+import { default as mm, MemoizeFunc } from 'fast-memoize';
+import {
+  CommandsType,
+  CondResult,
+  ConfigType,
+  Context,
+  DataserviceType,
+  Request,
+  Result,
+  ServiceEntry,
+  StatementNode
+} from './types';
 
 // CORE -start-
 
@@ -18,32 +29,32 @@ const STATEMENT_DELIMITER = ';';
 const STATEMENT_ESCAPE = '\\';
 let CONTEXT_COUNTER = 1;
 
-const Dataservice = {
-  processSql: (..._: any) => ({
-    header: [],
-    table: [[]],
-    rowsAffected: 0
-  })
+export const Dataservice: DataserviceType = {
+  processSql: async (sql) => {
+    return {
+      header: [],
+      table: [[]],
+      rowsAffected: 0,
+      exception: `Just a dummy function? (${sql})`
+    };
+  }
 };
 
-module.exports.Dataservice = Dataservice;
-
-const Config: any = {
+export const Config: ConfigType = {
   getServiceEntrySql:
     'Example: select SERVICE_ID, STATEMENTS, TAGS, ROLES from T_SERVICE_TABLE where SERVICE_ID = :serviceId',
-  saveServiceEntry: null,
-  statementsPreprocessor: null
+  saveServiceEntry: '',
+  statementsPreprocessor: null,
+  logger: pino({
+    level: 'info',
+    prettyPrint: {
+      colorize: true
+    }
+  }),
+  ignoredErrors: []
 };
-module.exports.Config = Config;
 
-Config.logger = pino({
-  level: 'info',
-  prettyPrint: {
-    colorize: true
-  }
-});
-
-const Commands: CommandsType = {};
+export const Commands: CommandsType = {};
 
 const DirectServices: Record<string, any> = {};
 let fnCounter = 0;
@@ -55,8 +66,6 @@ export function addService(serviceId: string, roles: string[], serviceFunction: 
   DirectServices[serviceId] = { serviceId, roles, statements };
   return DirectServices;
 }
-
-module.exports.Commands = Commands;
 
 Commands.StartBlock = {
   if: true,
@@ -144,7 +153,7 @@ async function runIntern(request: Request, contextIn: any = {}) {
   return await processCommandBlock(statementNode, request, {}, serviceEntry, context);
 }
 
-async function run(request: Request, context = {}) {
+export async function run(request: Request, context = {}) {
   const result = await runIntern(request, context);
   const output = request.output;
   if (result && output === 'list') {
@@ -158,8 +167,6 @@ async function run(request: Request, context = {}) {
   }
   return result;
 }
-
-module.exports.run = run;
 
 function buildCommandBlockTree(root: StatementNode, statementList: string[], pointer: number) {
   while (pointer < statementList.length) {
@@ -196,9 +203,13 @@ async function resolveIncludes(serviceEntry: ServiceEntry, context: Context) {
 
     if (stmt.substring(0, _inc.length) === _inc) {
       let serviceId = '';
-      let se;
+      let se = null;
       try {
-        serviceId = parse_statement(stmt).parameter;
+        const parsed = parse_statement(stmt);
+        if (parsed === null) {
+          continue;
+        }
+        serviceId = parsed.parameter;
         se = await getServiceEntry(serviceId);
         if (se) {
           let counter = context.includes[se.serviceId] || 0;
@@ -227,7 +238,7 @@ async function resolveIncludes(serviceEntry: ServiceEntry, context: Context) {
   return resolvedList;
 }
 
-async function prepareCommandBlock(se: ServiceEntry, context: Context) {
+export async function prepareCommandBlock(se: ServiceEntry, context: Context) {
   context = context || {};
   const statementList = await resolveIncludes(se, context);
   const statementNode: StatementNode = {
@@ -239,8 +250,6 @@ async function prepareCommandBlock(se: ServiceEntry, context: Context) {
   buildCommandBlockTree(statementNode, statementList, 0);
   return statementNode;
 }
-
-module.exports.prepareCommandBlock = prepareCommandBlock;
 
 async function processCommandBlock(
   statementNode: StatementNode,
@@ -272,7 +281,7 @@ async function processCommandBlock(
   }
 }
 
-async function getServiceEntry(serviceId: string) {
+export async function getServiceEntry(serviceId: string) {
   let serviceEntry = DirectServices[serviceId];
   if (typeof serviceEntry === 'object') {
     //
@@ -301,8 +310,6 @@ async function getServiceEntry(serviceId: string) {
   }
   return serviceEntry;
 }
-
-module.exports.getServiceEntry = getServiceEntry;
 
 //
 // COMMANDs -start- ...
@@ -336,7 +343,7 @@ async function sqlCommand(
   serviceEntry: ServiceEntry,
   context: Context
 ) {
-  return await Dataservice.processSql(statementNode.parameter, request.parameters, serviceEntry, context);
+  return await Dataservice.processSql(statementNode.parameter, request.parameters, { serviceEntry, context });
 }
 
 Commands.Registry.sql = sqlCommand;
@@ -378,14 +385,14 @@ Commands.Registry['serviceId'] = serviceIdCommand;
 async function parametersCommand(
   request: Request,
   currentResult: Result,
-  statementNode: StatementNode,
+  statementNodeIn: StatementNode,
   serviceEntry: ServiceEntry,
   context: Context
 ) {
-  const overwrite = statementNode.cmd === 'parameters';
+  const overwrite = statementNodeIn.cmd === 'parameters';
 
-  statementNode = parse_statement(statementNode.parameter);
-  if (isEmpty(statementNode)) {
+  const statementNode = parse_statement(statementNodeIn.parameter);
+  if (statementNode === null) {
     return currentResult;
   }
 
@@ -571,11 +578,11 @@ Commands.Registry['include'] = noopCommand;
 //
 //
 
-function parse_statement(statement: string): StatementNode {
+function parse_statement(statement: string): StatementNode | null {
   statement = statement.trim();
-  // TODO if (isEmpty(statement)) {
-  //   return;
-  // }
+  if (isEmpty(statement)) {
+    return null;
+  }
   let firstWhiteSpace = statement.length;
   for (let i = 0; i < statement.length; i++) {
     const ch = statement[i];
@@ -612,18 +619,16 @@ function trim(str: string) {
   return str.trim();
 }
 
-function tokenize(str: string, del: string, esc: string) {
+export function tokenize(str: string, del: string, esc: string) {
   if (!str) {
     return [];
   }
   // first we count the tokens
-  let count = 1;
   let inescape = false;
   let pc = '';
   let buf = '';
   for (const c of str) {
     if (c === del && !inescape) {
-      count++;
       continue;
     }
     if (c === esc && !inescape) {
@@ -663,14 +668,12 @@ function tokenize(str: string, del: string, esc: string) {
   return tokens;
 }
 
-module.exports.tokenize = tokenize;
-
 export function deepClone(jsonObject: any) {
   const s = JSON.stringify(jsonObject);
   return JSON.parse(s);
 }
 
-function resolve_value(term: string, request: Request) {
+export function resolve_value(term: string, request: Request) {
   term = trim(term);
   if (term.charAt(0) === ':') {
     return request.parameters[term.substring(1)] || '';
@@ -681,15 +684,13 @@ function resolve_value(term: string, request: Request) {
   return term;
 }
 
-module.exports.resolve_value = resolve_value;
-
 // CORE -end-
 
 //
 // Supplementary functions
 //
 
-async function processSqlText(statements: string, source: string) {
+export async function processSqlText(statements: string, source: string) {
   const gResult = {
     name: source || 'processSqlText-process',
     counter: 0
@@ -708,7 +709,7 @@ async function processSqlText(statements: string, source: string) {
     if (line.endsWith(';')) {
       sqlStatement += line.substring(0, line.length - 1) + '\n';
       try {
-        const result: Result = await Dataservice.processSql(sqlStatement, {}, 10000);
+        const result: Result = await Dataservice.processSql(sqlStatement, {}, { maxRows: 10000 });
         logResult(result);
         gResult.counter++;
       } catch (e: any) {
@@ -723,9 +724,7 @@ async function processSqlText(statements: string, source: string) {
   return gResult;
 }
 
-module.exports.processSqlText = processSqlText;
-
-async function processRqSqlText(rqSqlText: string, source: string) {
+export async function processRqSqlText(rqSqlText: string, source: string) {
   let parameters = {};
   let statements = '';
   const gResult = {
@@ -778,8 +777,6 @@ async function processRqSqlText(rqSqlText: string, source: string) {
   return gResult;
 }
 
-module.exports.processRqSqlText = processRqSqlText;
-
 function logResult(result: Result) {
   if (result.exception) {
     filteredError(`Result exception: ${result.exception}`);
@@ -788,7 +785,7 @@ function logResult(result: Result) {
   }
 }
 
-async function saveRQService(parameters: Record<string, string>, statements: string, source: string) {
+export async function saveRQService(parameters: Record<string, string>, statements: string, source: string) {
   parameters['source'] = source;
   parameters['statements'] = statements;
   return await run({
@@ -799,8 +796,6 @@ async function saveRQService(parameters: Record<string, string>, statements: str
   });
 }
 
-module.exports.saveRQService = saveRQService;
-
 function processParameter(parameters: Record<any, any>, line: string) {
   const p = line.split('=');
   if (p.length > 1) {
@@ -810,7 +805,7 @@ function processParameter(parameters: Record<any, any>, line: string) {
   }
 }
 
-function statementNodeEquals(actual: StatementNode, expected: StatementNode, assert: any) {
+export function statementNodeEquals(actual: StatementNode, expected: StatementNode, assert: any) {
   assert.equal(actual.cmd, expected.cmd);
   actual.children = actual.children || [];
   expected.children = expected.children || [];
@@ -820,9 +815,7 @@ function statementNodeEquals(actual: StatementNode, expected: StatementNode, ass
   }
 }
 
-module.exports.statementNodeEquals = statementNodeEquals;
-
-function toColumnList(data: Result, columnName: string) {
+export function toColumnList(data: Result, columnName: string) {
   let list: any = data;
   if (!Array.isArray(data)) {
     list = toList(data);
@@ -836,15 +829,11 @@ function toColumnList(data: Result, columnName: string) {
   return columnList;
 }
 
-module.exports.toColumnList = toColumnList;
-
-function trunk(s: string, n: number) {
+export function trunk(s: string, n: number) {
   return s && s.length > n ? s.substr(0, n - 3) + '...' : s;
 }
 
-module.exports.trunk = trunk;
-
-async function initRepository(sqlDirectories: string[], tags: string[]) {
+export async function initRepository(sqlDirectories: string[], tags: string[]) {
   tags = tags || [''];
 
   for (const tag of tags) {
@@ -903,13 +892,11 @@ async function initRepository(sqlDirectories: string[], tags: string[]) {
   }
 }
 
-module.exports.initRepository = initRepository;
-
 //
 // FROM remotequery-0.9.0.js
 //
 
-function toList(serviceData: Result): Record<string, string>[] {
+export function toList(serviceData: Result): Record<string, string>[] {
   if (Array.isArray(serviceData)) {
     return serviceData;
   }
@@ -918,7 +905,7 @@ function toList(serviceData: Result): Record<string, string>[] {
     const header = serviceData.header;
     const table = serviceData.table;
 
-    table.forEach((row, i) => {
+    table.forEach((row) => {
       const obj: Record<string, string> = {};
       list.push(obj);
       for (let j = 0; j < header.length; j++) {
@@ -930,15 +917,11 @@ function toList(serviceData: Result): Record<string, string>[] {
   return list;
 }
 
-module.exports.toList = toList;
-
-function toMap(data: Result, arg0: any) {
+export function toMap(data: Result, arg0: any) {
   return toMapByColumn(data, arg0);
 }
 
-module.exports.toMap = toMap;
-
-function toMapByColumn(data: Result, column: any) {
+export function toMapByColumn(data: Result, column: any) {
   const list = toList(data);
 
   const r: any = {};
@@ -960,15 +943,11 @@ function toMapByColumn(data: Result, column: any) {
   }
 }
 
-module.exports.toMapByColumn = toMapByColumn;
-
-function toFirst(serviceData: any) {
+export function toFirst(serviceData: any) {
   return toList(serviceData)[0];
 }
 
-module.exports.toFirst = toFirst;
-
-function texting(templateString: string, map: Record<string, string>) {
+export function texting(templateString: string, map: Record<string, string>) {
   if (typeof map !== 'object') {
     return templateString;
   }
@@ -980,19 +959,19 @@ function texting(templateString: string, map: Record<string, string>) {
   return templateString;
 }
 
-module.exports.texting = texting;
+// const isFilteredOutMemo = mm(isFilteredOut);
 
-const isFilteredOutMemo = memoize(isFilteredOut);
+export const memo1: MemoizeFunc = mm;
 
 function filteredError(error: any) {
   if (error) {
-    const errorString = error.message || error.toString();
-    if (!isFilteredOutMemo(Config.ignoredErrors, errorString)) {
-      Config.logger.error(error);
-    }
+    // const errorString = error.message || error.toString();
+    // if (!isFilteredOutMemo(Config.ignoredErrors, errorString)) {
+    Config.logger.error(error);
+    // }
   }
 }
 
-function isFilteredOut(ignoredErrors: string[], errorString: string) {
-  return (ignoredErrors || []).reduce((a, e) => errorString.includes(e) || a, false);
-}
+// function isFilteredOut(ignoredErrors: string[], errorString: string) {
+//   return (ignoredErrors || []).reduce((a, e) => errorString.includes(e) || a, false);
+// }

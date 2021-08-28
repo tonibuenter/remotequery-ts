@@ -1,3 +1,57 @@
-import { addService } from './remotequery';
+import {
+  addService,
+  Commands,
+  Config,
+  Dataservice,
+  deepClone,
+  getServiceEntry,
+  initRepository,
+  memo1,
+  prepareCommandBlock,
+  processRqSqlText,
+  processSqlText,
+  resolve_value,
+  run,
+  saveRQService,
+  statementNodeEquals,
+  toColumnList,
+  toFirst,
+  tokenize,
+  toList,
+  toMap,
+  toMapByColumn,
+  trunk
+} from './remotequery';
 
-export { addService };
+import { ConfigType, Context, DataserviceType, ProcessSql, Request, Result } from './types';
+
+export {
+  Commands,
+  Config,
+  prepareCommandBlock,
+  getServiceEntry,
+  tokenize,
+  trunk,
+  Dataservice,
+  addService,
+  deepClone,
+  resolve_value,
+  processSqlText,
+  processRqSqlText,
+  saveRQService,
+  statementNodeEquals,
+  toColumnList,
+  initRepository,
+  toList,
+  toMap,
+  toMapByColumn,
+  toFirst,
+  run,
+  Result,
+  Request,
+  Context,
+  DataserviceType,
+  ProcessSql,
+  ConfigType,
+  memo1
+};

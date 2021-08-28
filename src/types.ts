@@ -1,3 +1,8 @@
+/* tslint:disable:no-string-literal */
+/* eslint-disable @typescript-eslint/no-explicit-any,@typescript-eslint/explicit-module-boundary-types */
+
+import { Logger } from 'pino';
+
 export type Request = {
   userId: string;
   roles: string[];
@@ -14,6 +19,8 @@ export type Context = {
   systemMessages: string[];
   statusCode: string;
   includes: Record<any, any>;
+  maxRows?: number;
+  serviceEntry?: ServiceEntry;
 };
 
 export type ServiceEntry = {
@@ -29,13 +36,18 @@ export type StatementNode = {
 };
 
 export type Result = {
-  header: string[];
-  table: string[][];
-  rowsAffected: number;
+  types?: string[];
+  headerSql?: string[];
+  header?: string[];
+  table?: string[][];
+  rowsAffected?: number;
   exception?: string;
+  from?: number;
+  hasMore?: boolean;
+  stack?: string | undefined;
 };
 
-export type EmtpyResult = {};
+export type EmtpyResult = Record<any, any>;
 
 export type CondResult = Result | EmtpyResult;
 
@@ -46,3 +58,14 @@ export type CommandsType = {
   EndBlock?: any;
   Registry?: RegistryType;
 };
+
+export type ConfigType = {
+  getServiceEntrySql: string;
+  saveServiceEntry: string;
+  statementsPreprocessor: any;
+  logger: Logger;
+  ignoredErrors: string[];
+};
+
+export type ProcessSql = (sql: string, parameters?: Record<string, string>, context?: any) => Promise<Result>;
+export type DataserviceType = { processSql: ProcessSql };
