@@ -1,25 +1,18 @@
+// noinspection SqlResolve
 /* tslint:disable:no-console */
 /* tslint:disable:no-unused-expression */
-// noinspection SqlResolve
-// noinspection Datasource
 
-import { Config as RqConfig, Dataservice, Request as RqRequest, Result, run as rqRun } from '../src';
+import { Config, Request as RqRequest, Result, run as rqRun, consoleLogger } from '../src';
 import * as rq_mysql from 'remotequery-ts-mysql';
-import * as pino from 'pino';
 import { expect } from 'chai';
 
 describe('rq and sql_rq', () => {
   before(() => {
     rq_mysql.init({ user: 'foo', password: 'bar', host: 'localhost', database: 'eventdb' });
-    Dataservice.processSql = rq_mysql.processSql;
-    RqConfig.getServiceEntrySql = 'select * from T_SERVICE where SERVICE_ID = :serviceId';
-    RqConfig.saveServiceEntry = 'saveService';
-    RqConfig.logger = pino({
-      level: 'info',
-      prettyPrint: {
-        colorize: true
-      }
-    });
+    Config.getServiceEntrySql = 'select * from T_SERVICE where SERVICE_ID = :serviceId';
+    Config.saveServiceEntry = 'saveService';
+    Config.logger = consoleLogger;
+    Config.processSql = rq_mysql.processSql;
   }); // the tests container
   it('processSql', async () => {
     const result: Result = await rq_mysql.processSql('select * from T_APP_PROPERTIES', {}, { maxRows: 100 });

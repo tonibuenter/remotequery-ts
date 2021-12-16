@@ -2,11 +2,9 @@ import {
   addService,
   Commands,
   Config,
-  Dataservice,
   deepClone,
   getServiceEntry,
   initRepository,
-  memo1,
   prepareCommandBlock,
   processRqSqlText,
   processSqlText,
@@ -14,6 +12,7 @@ import {
   run,
   saveRQService,
   statementNodeEquals,
+  consoleLogger,
   toColumnList,
   toFirst,
   tokenize,
@@ -23,16 +22,16 @@ import {
   trunk
 } from './remotequery';
 
-import { ConfigType, Context, DataserviceType, ProcessSql, Request, Result } from './types';
+import { ConfigType, Context, ProcessSql, Request, Result } from './types';
 
 export {
+  consoleLogger,
   Commands,
   Config,
   prepareCommandBlock,
   getServiceEntry,
   tokenize,
   trunk,
-  Dataservice,
   addService,
   deepClone,
   resolve_value,
@@ -50,8 +49,6 @@ export {
   Result,
   Request,
   Context,
-  DataserviceType,
   ProcessSql,
-  ConfigType,
-  memo1
+  ConfigType
 };

@@ -1,6 +1,6 @@
 {
   "name": "remotequery-ts",
-  "version": "0.0.9",
+  "version": "0.0.12",
   "description": "Remotequery for TypeScript",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -11,7 +11,6 @@
     "format": "prettier --write \"src/**/*.ts\" \"src/**/*.js\"",
     "lint": "tslint -p tsconfig.json",
     "test": "mocha -r ts-node/register 'test/**/*.ts'"
-
   },
   "repository": {
     "type": "git",
@@ -26,27 +25,22 @@
   ],
   "author": "Toni A. Buenter",
   "license": "ISC",
-  "dependencies": {
-    "fast-memoize": "^2.5.2",
-    "pino": "^6.13.1"
-  },
   "devDependencies": {
     "@types/chai": "^4.2.21",
     "@types/mocha": "^9.0.0",
     "@types/node": "^16.7.2",
-    "@types/pino": "^6.3.11",
     "@typescript-eslint/eslint-plugin": "^4.29.3",
     "@typescript-eslint/parser": "^4.29.3",
+    "chai": "^4.3.4",
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.3.0",
     "eslint-plugin-prettier": "^3.4.1",
     "mocha": "^9.1.0",
-    "chai": "^4.3.4",
     "prettier": "^2.3.2",
+    "remotequery-ts-mysql": "^0.0.5",
     "ts-node": "^10.2.1",
     "tslint": "^6.1.3",
     "tslint-config-prettier": "^1.18.0",
-    "typescript": "^4.3.5",
-    "remotequery-ts-mysql": "^0.0.5"
+    "typescript": "^4.3.5"
   }
 }
