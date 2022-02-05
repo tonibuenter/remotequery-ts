@@ -2,22 +2,18 @@
 /* tslint:disable:no-string-literal */
 /* eslint-disable @typescript-eslint/no-explicit-any,@typescript-eslint/explicit-module-boundary-types */
 
-import * as fs from 'fs';
 import {
   CommandsType,
   CondResult,
   ConfigType,
   Context,
-  Logger,
   Request,
   Result,
+  ResultX,
   ServiceEntry,
   StatementNode
 } from './types';
-
-// CORE -start-
-
-// export const SYSTEM_CODE = 4000;
+import { consoleLogger, tokenize } from './utils';
 
 const ANONYMOUS = 'ANONYMOUS';
 const MAX_RECURSION = 40;
@@ -26,17 +22,6 @@ const MAX_WHILE = 100000;
 const STATEMENT_DELIMITER = ';';
 const STATEMENT_ESCAPE = '\\';
 let CONTEXT_COUNTER = 1;
-
-export const consoleLogger: Logger = {
-  // tslint:disable-next-line:no-console
-  debug: (msg: string) => console.debug(msg),
-  // tslint:disable-next-line:no-console
-  info: (msg: string) => console.info(msg),
-  // tslint:disable-next-line:no-console
-  warn: (msg: string) => console.warn(msg),
-  // tslint:disable-next-line:no-console
-  error: (msg: string) => console.error(msg)
-};
 
 export const Config: ConfigType = {
   getServiceEntrySql:
@@ -81,17 +66,7 @@ export function addService(
   return DirectServices;
 }
 
-async function runIntern(request: Request, contextIn: any = {}) {
-  const context: Context = {
-    recursion: 0,
-    contextId: CONTEXT_COUNTER++,
-    rowsAffectedList: [],
-    userMessages: [],
-    systemMessages: [],
-    statusCode: -1,
-    ...contextIn
-  };
-
+async function runIntern(request: Request, context: Context): Promise<Result> {
   if (!request.userId) {
     Config.logger.warn(`Request has no userId set. Process continues with userId: ${ANONYMOUS} (${request.serviceId})`);
     request.userId = ANONYMOUS;
@@ -130,7 +105,7 @@ async function runIntern(request: Request, contextIn: any = {}) {
     Config.logger.warn(
       `No access to ${request.serviceId} for ${request.userId} (service roles: ${serviceEntry.roles}, request roles ${request.roles})`
     );
-    context.statusCode = '403';
+    context.statusCode = 403;
     return { exception: 'no access' };
   }
 
@@ -139,22 +114,28 @@ async function runIntern(request: Request, contextIn: any = {}) {
   //
   Config.logger.info(`Service ${serviceEntry.serviceId} found for ${request.userId}`);
   const statementNode = await prepareCommandBlock(serviceEntry, context);
-  return await processCommandBlock(statementNode, request, {}, serviceEntry, context);
+  return processCommandBlock(statementNode, request, {}, serviceEntry, context);
 }
 
-export async function run(request: Request, context = {}) {
+export async function run(request: Request): Promise<ResultX> {
+  const context: Context = {
+    recursion: 0,
+    contextId: CONTEXT_COUNTER++,
+    rowsAffectedList: [],
+    userMessages: [],
+    systemMessages: [],
+    statusCode: -1,
+    includes: {}
+  };
+
   const result = await runIntern(request, context);
-  const output = request.output;
-  if (result && output === 'list') {
-    return toList(result);
-  }
-  if (result && output === 'single') {
-    return result.table ? result.table[0][0] : undefined;
-  }
-  if (result && output === 'first') {
-    return toFirst(result);
-  }
-  return result;
+
+  return {
+    ...result,
+    list: () => toList(result),
+    first: () => toList(result)[0],
+    single: () => (result.table ? result.table[0][0] : undefined)
+  };
 }
 
 function buildCommandBlockTree(root: StatementNode, statementList: string[], pointer: number) {
@@ -181,44 +162,38 @@ function buildCommandBlockTree(root: StatementNode, statementList: string[], poi
 
 async function resolveIncludes(serviceEntry: ServiceEntry, context: Context) {
   const statements = serviceEntry.statements;
-  context.includes = context.includes || {};
   const _inc = 'include';
 
   const statementList = tokenize(statements.trim(), STATEMENT_DELIMITER, STATEMENT_ESCAPE);
   const resolvedList: string[] = [];
 
-  for (let stmt of statementList) {
-    stmt = stmt.trim();
+  for (const s0 of statementList) {
+    const stmt = s0.trim();
 
     if (stmt.substring(0, _inc.length) === _inc) {
       let serviceId = '';
       let se = null;
-      try {
-        const parsed = parse_statement(stmt);
-        if (parsed === null) {
-          continue;
-        }
-        serviceId = parsed.parameter;
-        se = await getServiceEntry(serviceId);
-        if (se) {
-          let counter = context.includes[se.serviceId] || 0;
-          counter += 1;
-          if (counter < MAX_INCLUDES) {
-            context.includes[se.serviceId] = counter;
-            const resolvedList2 = await resolveIncludes(se, context);
+      const parsed = parse_statement(stmt);
+      if (parsed === null) {
+        continue;
+      }
+      serviceId = parsed.parameter;
+      se = await getServiceEntry(serviceId);
+      if (se) {
+        let counter = context.includes[se.serviceId] || 0;
+        counter += 1;
+        if (counter < MAX_INCLUDES) {
+          context.includes[se.serviceId] = counter;
+          const resolvedList2 = await resolveIncludes(se, context);
 
-            resolvedList2.forEach((s) => {
-              resolvedList.push(s);
-            });
-          } else {
-            filteredError('include command overflow:' + se.serviceId);
-          }
+          resolvedList2.forEach((s) => {
+            resolvedList.push(s);
+          });
         } else {
-          filteredError(`Did not find service for include command: ${serviceId}`);
+          filteredError('include command overflow:' + se.serviceId);
         }
-      } catch (err) {
-        filteredError(err);
-        resolvedList.push('systemMessage:include-of-error-serviceId: ' + serviceEntry.serviceId);
+      } else {
+        filteredError(`Did not find service for include command: ${serviceId}`);
       }
     } else {
       resolvedList.push(stmt);
@@ -228,7 +203,6 @@ async function resolveIncludes(serviceEntry: ServiceEntry, context: Context) {
 }
 
 export async function prepareCommandBlock(se: ServiceEntry, context: Context) {
-  context = context || {};
   const statementList = await resolveIncludes(se, context);
   const statementNode: StatementNode = {
     cmd: 'serviceRoot',
@@ -289,14 +263,6 @@ export async function getServiceEntry(serviceId: string) {
   if (!serviceEntry) {
     return;
   }
-  // if (serviceEntry.roles) {
-  //   serviceEntry.roles = serviceEntry.roles.split(/\s*,\s*/);
-  //   for (let i = 0; i < serviceEntry.roles.length; i++) {
-  //     serviceEntry.roles[i] = trim(serviceEntry.roles[i]);
-  //   }
-  // } else {
-  //   serviceEntry.roles = [];
-  // }
 
   if (Config.statementsPreprocessor) {
     serviceEntry.statements = Config.statementsPreprocessor(serviceEntry.statements);
@@ -304,11 +270,6 @@ export async function getServiceEntry(serviceId: string) {
   return serviceEntry;
 }
 
-//
-// COMMANDs -start- ...
-//
-
-// TODO replace with a processStatements command that is used in all statement lists processing (if, while, for ...)
 async function serviceRootCommand(
   request: Request,
   currentResult: Result,
@@ -318,7 +279,6 @@ async function serviceRootCommand(
 ) {
   for (const snChild of statementNode.children || []) {
     const r = await processCommandBlock(snChild, request, currentResult, serviceEntry, context);
-    // abort
     if (r === 'abort') {
       return currentResult;
     }
@@ -336,7 +296,7 @@ async function sqlCommand(
   serviceEntry: ServiceEntry,
   context: Context
 ) {
-  return await Config.processSql(statementNode.parameter, request.parameters, { serviceEntry, context });
+  return Config.processSql(statementNode.parameter, request.parameters, { serviceEntry, context });
 }
 
 Commands.Registry.sql = sqlCommand;
@@ -347,7 +307,7 @@ async function setCommand(request: Request, currentResult: Result, statementNode
   const n = nv[0].trim();
   let v = nv.length > 1 ? nv[1] : '';
 
-  v = resolve_value(v, request);
+  v = resolveValue(v, request);
   const requestValue = request.parameters[n];
 
   if (overwrite || isEmpty(requestValue)) {
@@ -370,7 +330,7 @@ async function serviceIdCommand(
 ) {
   const iRequest = deepClone(request);
   iRequest.serviceId = statementNode.parameter;
-  return await runIntern(iRequest, context);
+  return runIntern(iRequest, context);
 }
 
 Commands.Registry['serviceId'] = serviceIdCommand;
@@ -393,7 +353,6 @@ async function parametersCommand(
   if (!result || !result.header || result.header.length === 0) {
     return currentResult;
   }
-  // empty all paramters if overwrite == true
   if (overwrite) {
     for (const head of result.header) {
       request.parameters[head] = '';
@@ -422,7 +381,7 @@ async function ifCommand(
 ) {
   const ifEmpty = statementNode.cmd === 'if-empty';
 
-  const condition = resolve_value(statementNode.parameter, request);
+  const condition = resolveValue(statementNode.parameter, request);
   let isThen = !!condition;
 
   isThen = ifEmpty ? !isThen : isThen;
@@ -451,7 +410,7 @@ async function switchCommand(
   serviceEntry: ServiceEntry,
   context: Context
 ) {
-  const switchValue = resolve_value(statementNode.parameter, request);
+  const switchValue = resolveValue(statementNode.parameter, request);
   let inSwitch = false;
   let caseFound = false;
 
@@ -461,7 +420,7 @@ async function switchCommand(
       continue;
     }
     if ('case' === cbChild.cmd) {
-      const caseParameter = resolve_value(cbChild.parameter, request);
+      const caseParameter = resolveValue(cbChild.parameter, request);
       if (caseParameter === switchValue) {
         caseFound = true;
         inSwitch = true;
@@ -491,7 +450,7 @@ async function whileCommand(
 ) {
   let counter = 0;
   while (counter < MAX_WHILE) {
-    const whileCondition = resolve_value(statementNode.parameter, request);
+    const whileCondition = resolveValue(statementNode.parameter, request);
     if (!whileCondition) {
       break;
     }
@@ -601,7 +560,7 @@ function isCmd(cmd: string) {
   return Commands.StartBlock[cmd] || Commands.EndBlock[cmd] || Commands.Registry[cmd];
 }
 
-function isEmpty(e: any) {
+function isEmpty(e: undefined | null | string | any[]) {
   return !e || (Array.isArray(e) && e.length === 0);
 }
 
@@ -612,61 +571,12 @@ function trim(str: string) {
   return str.trim();
 }
 
-export function tokenize(str: string, del: string, esc: string) {
-  if (!str) {
-    return [];
-  }
-  // first we count the tokens
-  let inescape = false;
-  let pc = '';
-  let buf = '';
-  for (const c of str) {
-    if (c === del && !inescape) {
-      continue;
-    }
-    if (c === esc && !inescape) {
-      inescape = true;
-      continue;
-    }
-    inescape = false;
-  }
-  const tokens = [];
-
-  // now we collect the characters and create all tokens
-  let k = 0;
-  for (const c of str) {
-    if (c === del && !inescape) {
-      tokens[k] = buf;
-      buf = '';
-      k++;
-      pc = c;
-      continue;
-    }
-    if (c === esc && !inescape) {
-      inescape = true;
-      pc = c;
-      continue;
-    }
-    //
-    // append
-    //
-    if (c !== del && pc === esc) {
-      buf += pc;
-    }
-    buf += c;
-    pc = c;
-    inescape = false;
-  }
-  tokens[k] = buf;
-  return tokens;
-}
-
 export function deepClone(jsonObject: any) {
   const s = JSON.stringify(jsonObject);
   return JSON.parse(s);
 }
 
-export function resolve_value(term: string, request: Request) {
+export function resolveValue(term: string, request: Request) {
   term = trim(term);
   if (term.charAt(0) === ':') {
     return request.parameters[term.substring(1)] || '';
@@ -717,60 +627,7 @@ export async function processSqlText(statements: string, source: string) {
   return gResult;
 }
 
-export async function processRqSqlText(rqSqlText: string, source: string) {
-  let parameters = {};
-  let statements = '';
-  const gResult = {
-    name: source || 'processRqSqlText-process',
-    counter: 0
-  };
-  try {
-    const lines = rqSqlText.split('\n');
-    let inComment = false;
-    let inStatement = false;
-
-    for (const line2 of lines) {
-      const line = line2.trim();
-      if (!line) {
-        continue;
-      }
-      // comment
-      if (line.startsWith('--')) {
-        if (!inComment) {
-          //
-          // execute collected
-          //
-          if (inStatement) {
-            const result = await saveRQService(parameters, statements, source);
-            logResult(result);
-            statements = '';
-            parameters = {};
-            inStatement = false;
-            gResult.counter++;
-          }
-        }
-        inComment = true;
-        processParameter(parameters, line.substring(2));
-        continue;
-      }
-      inComment = false;
-      inStatement = true;
-      statements += line2 + '\n';
-    }
-    if (inStatement) {
-      const result = await saveRQService(parameters, statements, source);
-      logResult(result);
-      gResult.counter++;
-    }
-  } catch (err: any) {
-    filteredError(err.message);
-    Config.logger.error(err.stack.toString());
-  }
-  Config.logger.info(`${source} : ${gResult.counter} sq sql statements done.`);
-  return gResult;
-}
-
-function logResult(result: Result) {
+export function logResult(result: Result) {
   if (result.exception) {
     filteredError(`Result exception: ${result.exception}`);
   } else {
@@ -778,21 +635,9 @@ function logResult(result: Result) {
   }
 }
 
-export async function saveRQService(parameters: Record<string, string>, statements: string, source: string) {
-  parameters['source'] = source;
-  parameters['statements'] = statements;
-  return await run({
-    serviceId: Config.saveServiceEntry,
-    roles: ['SYSTEM'],
-    parameters,
-    userId: 'SYSTEM'
-  });
-}
-
-function processParameter(parameters: Record<any, any>, line: string) {
+export function processParameter(parameters: Record<any, any>, line: string) {
   const p = line.split('=');
   if (p.length > 1) {
-    // String name = Utils.camelCase(trim(p[0]))
     const name = trim(p[0]);
     parameters[name] = trim(p[1]);
   }
@@ -824,65 +669,6 @@ export function toColumnList(data: Result, columnName: string) {
 
 export function trunk(s: string, n: number) {
   return s && s.length > n ? s.substr(0, n - 3) + '...' : s;
-}
-
-export async function initRepository(sqlDirectories: string[], tags: string[]) {
-  tags = tags || [''];
-
-  for (const tag of tags) {
-    for (const sqlDir of sqlDirectories) {
-      if (!fs.existsSync(sqlDir) || !fs.lstatSync(sqlDir).isDirectory()) {
-        Config.logger.warn(`Directory does not exist: ${sqlDir}`);
-        continue;
-      }
-      const sqlfileNames = fs.readdirSync(sqlDir).filter((filename) => filename.includes(tag));
-      //
-      // SQL
-      //
-      for (const filename of sqlfileNames) {
-        try {
-          if (filename.endsWith('.sql') && !filename.endsWith('.rq.sql')) {
-            Config.logger.info(`Start loading as SQL file: ${filename}`);
-            const text = fs.readFileSync(sqlDir + '/' + filename, 'utf8');
-            Config.logger.debug(text);
-            // TODO let result =
-            await processSqlText(text, filename);
-            // TODO if (result?.exception) {
-            //   filteredError(result.exception);
-            // } else {
-            //   Config.logger.debug(`updates: ${result}`);
-            // }
-          }
-        } catch (err) {
-          filteredError(err);
-        }
-      }
-
-      //
-      // RQ.SQL
-      //
-      for (const filename of sqlfileNames) {
-        try {
-          if (filename.endsWith('.rq.sql')) {
-            Config.logger.info(`Start loading as RQ-SQL file: ${filename}`);
-            const text = fs.readFileSync(sqlDir + '/' + filename, 'utf8');
-            Config.logger.debug(text);
-            const result = await processRqSqlText(text, filename);
-            if (!result) {
-              filteredError('Result is undefined! ');
-            }
-            // TODO else if (result.exception) {
-            //   filteredError(result.exception);
-            // } else {
-            //   Config.logger.debug(`updates: ${result}`);
-            // }
-          }
-        } catch (err) {
-          filteredError(err);
-        }
-      }
-    }
-  }
 }
 
 //
@@ -924,8 +710,6 @@ export function toMapByColumn(data: Result, column: any) {
   }
   return r;
 
-  // TODO return list.reduce((a, e) => (a[getKey(e)] = e), {});
-
   function getKey(e: Record<string, string>) {
     if (typeof column === 'string') {
       return e[column];
@@ -952,11 +736,15 @@ export function texting(templateString: string, map: Record<string, string>) {
   return templateString;
 }
 
-function filteredError(error: any) {
-  if (error) {
-    // const errorString = error.message || error.toString();
-    // if (!isFilteredOutMemo(Config.ignoredErrors, errorString)) {
-    Config.logger.error(error && error.toString() ? error.toString() : '');
-    // }
+export function filteredError(_error: any) {
+  if (_error) {
+    const _error1 = typeof _error === 'object' ? _error.message || _error.toString() : '';
+    if (isFilteredOut(Config.ignoredErrors, _error1) === false) {
+      Config.logger.error(_error1);
+    }
   }
+}
+
+function isFilteredOut(ignoredErrors: string[], errorString: string) {
+  return (ignoredErrors || []).reduce((a, e) => errorString.includes(e) || a, false);
 }

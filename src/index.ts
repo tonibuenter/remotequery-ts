@@ -4,28 +4,50 @@ import {
   Config,
   deepClone,
   getServiceEntry,
-  initRepository,
   prepareCommandBlock,
-  processRqSqlText,
   processSqlText,
-  resolve_value,
+  resolveValue,
   run,
-  saveRQService,
   statementNodeEquals,
-  consoleLogger,
   toColumnList,
   toFirst,
-  tokenize,
   toList,
   toMap,
   toMapByColumn,
   trunk
 } from './remotequery';
 
-import { ConfigType, Context, ProcessSql, Request, Result } from './types';
+import { initRepository, processRqSqlText, saveRQService } from './remotequery-utils';
+
+import {
+  CommandsType,
+  ConfigType,
+  Context,
+  EmtpyResult,
+  EndBlockType,
+  Logger,
+  LoggerFun,
+  LoggerLevel,
+  ProcessSql,
+  RegistryType,
+  Request,
+  Result,
+  ResultX,
+  ServiceEntry,
+  StartBlockType,
+  StatementNode
+} from './types';
+import { consoleLogger, tokenize } from './utils';
+
+export type { Result, ResultX };
 
 export {
   consoleLogger,
+  Logger,
+  LoggerFun,
+  LoggerLevel,
+  StartBlockType,
+  EndBlockType,
   Commands,
   Config,
   prepareCommandBlock,
@@ -34,7 +56,7 @@ export {
   trunk,
   addService,
   deepClone,
-  resolve_value,
+  resolveValue,
   processSqlText,
   processRqSqlText,
   saveRQService,
@@ -46,9 +68,13 @@ export {
   toMapByColumn,
   toFirst,
   run,
-  Result,
   Request,
   Context,
   ProcessSql,
-  ConfigType
+  ConfigType,
+  ServiceEntry,
+  StatementNode,
+  EmtpyResult,
+  RegistryType,
+  CommandsType
 };

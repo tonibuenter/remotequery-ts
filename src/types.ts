@@ -2,11 +2,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any,@typescript-eslint/explicit-module-boundary-types */
 
 export type Request = {
-  userId: string;
-  roles: string[];
+  userId?: string;
+  roles?: string[];
   serviceId: string;
   parameters: Record<string, string>;
-  output?: any;
 };
 
 export type Context = {
@@ -15,8 +14,8 @@ export type Context = {
   rowsAffectedList: any;
   userMessages: string[];
   systemMessages: string[];
-  statusCode: string;
-  includes: Record<any, any>;
+  statusCode: number;
+  includes: Record<string, number>;
   maxRows?: number;
   serviceEntry?: ServiceEntry;
 };
@@ -35,7 +34,7 @@ export type StatementNode = {
   children?: any[];
 };
 
-export type Result = {
+export interface Result {
   types?: string[];
   headerSql?: string[];
   header?: string[];
@@ -44,8 +43,14 @@ export type Result = {
   exception?: string;
   from?: number;
   hasMore?: boolean;
-  stack?: string | undefined;
-};
+  stack?: string;
+}
+
+export interface ResultX extends Result {
+  first: () => Record<string, string> | undefined;
+  list: () => Record<string, string>[];
+  single: () => string | undefined;
+}
 
 export type EmtpyResult = Record<any, any>;
 
@@ -74,4 +79,8 @@ export type ConfigType = {
   logger: Logger;
   ignoredErrors: string[];
   processSql: ProcessSql;
+};
+
+export const isError = (error: any): error is Error => {
+  return typeof error.message === 'string' && typeof error.name === 'string';
 };
