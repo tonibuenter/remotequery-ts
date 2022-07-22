@@ -1,11 +1,13 @@
 /* tslint:disable:no-string-literal */
 /* eslint-disable @typescript-eslint/no-explicit-any,@typescript-eslint/explicit-module-boundary-types */
 
+export type Simple = string | number | boolean;
+
 export type Request = {
   userId?: string;
   roles?: string[];
   serviceId: string;
-  parameters: Record<string, string>;
+  parameters: Record<string, Simple>;
 };
 
 export type Context = {
@@ -23,6 +25,7 @@ export type Context = {
 export type ServiceEntry = {
   serviceId: string;
   statements: string;
+  serviceFunction?: (request: Request, context: Context) => Result;
   roles: string[];
   tags: Set<string>;
 };
@@ -34,16 +37,19 @@ export type StatementNode = {
   children?: any[];
 };
 
-export interface Result {
+export interface ExceptionResult {
+  exception: string;
+  stack?: string;
+}
+
+export interface Result extends Partial<ExceptionResult> {
   types?: string[];
   headerSql?: string[];
   header?: string[];
   table?: string[][];
   rowsAffected?: number;
-  exception?: string;
   from?: number;
   hasMore?: boolean;
-  stack?: string;
 }
 
 export interface ResultX extends Result {
@@ -66,7 +72,7 @@ export type CommandsType = {
   Registry: Record<RegistryType, any>;
 };
 
-export type ProcessSql = (sql: string, parameters?: Record<string, string>, context?: any) => Promise<Result>;
+export type ProcessSql = (sql: string, parameters?: Record<string, Simple>, context?: any) => Promise<Result>;
 
 export type LoggerLevel = 'debug' | 'info' | 'warn' | 'error';
 export type LoggerFun = (msg: string) => void;
@@ -83,4 +89,27 @@ export type ConfigType = {
 
 export const isError = (error: any): error is Error => {
   return typeof error.message === 'string' && typeof error.name === 'string';
+};
+
+export interface RqDriver {
+  getConnection: () => Promise<any>;
+  returnConnection: (connection: any) => void; // (con: PoolConnection) => void;
+  processSql: ProcessSql;
+  processSqlDirect: (sql: string, values: any, maxRows: number) => Promise<Result>;
+  logger: Logger;
+  sqlLogger: Logger;
+}
+
+export function exceptionResult(e: string | Error | unknown): ExceptionResult {
+  if (isError(e)) {
+    return { exception: e.message, stack: e.stack };
+  } else if (typeof e === 'string') {
+    return { exception: e };
+  }
+  return { exception: 'Unknown' };
+}
+
+// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+export const isExceptionResult = (data: any): data is ExceptionResult => {
+  return data && typeof data.exception === 'string';
 };

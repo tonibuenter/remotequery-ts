@@ -37,7 +37,7 @@
     "eslint-plugin-prettier": "^3.4.1",
     "mocha": "^9.1.0",
     "prettier": "^2.3.2",
-    "remotequery-ts-mysql": "^0.0.5",
+    "remotequery-ts-mysql": "^0.0.10",
     "ts-node": "^10.2.1",
     "tslint": "^6.1.3",
     "tslint-config-prettier": "^1.18.0",

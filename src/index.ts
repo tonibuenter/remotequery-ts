@@ -1,23 +1,4 @@
-import {
-  addService,
-  Commands,
-  Config,
-  deepClone,
-  getServiceEntry,
-  prepareCommandBlock,
-  processSqlText,
-  resolveValue,
-  run,
-  statementNodeEquals,
-  toColumnList,
-  toFirst,
-  toList,
-  toMap,
-  toMapByColumn,
-  trunk
-} from './remotequery';
-
-import { initRepository, processRqSqlText, saveRQService } from './remotequery-utils';
+import { RemoteQueryUtils } from './remotequery-utils';
 
 import {
   CommandsType,
@@ -36,8 +17,10 @@ import {
   ServiceEntry,
   StartBlockType,
   StatementNode
-} from './types';
-import { consoleLogger, tokenize } from './utils';
+} from './remotequery-types';
+import { consoleLogger, toColumnList, tokenize, toList, toMap } from './utils';
+
+import { RemoteQuery } from './remotequery';
 
 export type { Result, ResultX };
 
@@ -48,26 +31,8 @@ export {
   LoggerLevel,
   StartBlockType,
   EndBlockType,
-  Commands,
-  Config,
-  prepareCommandBlock,
-  getServiceEntry,
+  RemoteQueryUtils,
   tokenize,
-  trunk,
-  addService,
-  deepClone,
-  resolveValue,
-  processSqlText,
-  processRqSqlText,
-  saveRQService,
-  statementNodeEquals,
-  toColumnList,
-  initRepository,
-  toList,
-  toMap,
-  toMapByColumn,
-  toFirst,
-  run,
   Request,
   Context,
   ProcessSql,
@@ -76,5 +41,9 @@ export {
   StatementNode,
   EmtpyResult,
   RegistryType,
-  CommandsType
+  CommandsType,
+  RemoteQuery,
+  toList,
+  toColumnList,
+  toMap
 };
