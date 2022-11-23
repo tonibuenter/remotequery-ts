@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any,@typescript-eslint/explicit-module-boundary-types */
 
 export type Simple = string | number | boolean;
+export type SRecord = Record<string, Simple>;
 
 export type Request = {
   userId?: string;
@@ -72,8 +73,6 @@ export type CommandsType = {
   Registry: Record<RegistryType, any>;
 };
 
-export type ProcessSql = (sql: string, parameters?: Record<string, Simple>, context?: any) => Promise<Result>;
-
 export type LoggerLevel = 'debug' | 'info' | 'warn' | 'error';
 export type LoggerFun = (msg: string) => void;
 export type Logger = Record<LoggerLevel, LoggerFun>;
@@ -84,20 +83,20 @@ export type ConfigType = {
   statementsPreprocessor: (statements: string) => string;
   logger: Logger;
   ignoredErrors: string[];
-  processSql: ProcessSql;
 };
 
 export const isError = (error: any): error is Error => {
   return typeof error.message === 'string' && typeof error.name === 'string';
 };
 
-export interface RqDriver {
-  getConnection: () => Promise<any>;
-  returnConnection: (connection: any) => void; // (con: PoolConnection) => void;
+export type ProcessSql = (sql: string, parameters?: SRecord, context?: any) => Promise<Result>;
+export type ProcessSqlDirect = (sql: string, values: any, maxRows: number) => Promise<Result>;
+export type GetServiceEntry = (serviceId: string) => Promise<ServiceEntry | ExceptionResult>;
+
+export interface Driver {
   processSql: ProcessSql;
-  processSqlDirect: (sql: string, values: any, maxRows: number) => Promise<Result>;
-  logger: Logger;
-  sqlLogger: Logger;
+  processSqlDirect: ProcessSqlDirect;
+  getServiceEntry: GetServiceEntry;
 }
 
 export function exceptionResult(e: string | Error | unknown): ExceptionResult {
@@ -113,3 +112,35 @@ export function exceptionResult(e: string | Error | unknown): ExceptionResult {
 export const isExceptionResult = (data: any): data is ExceptionResult => {
   return data && typeof data.exception === 'string';
 };
+
+export function toFirst(serviceData: Result): Record<string, string> | undefined {
+  return toList(serviceData)[0];
+}
+
+export function toList(serviceData: Result): Record<string, string>[] {
+  if (Array.isArray(serviceData)) {
+    return serviceData;
+  }
+  const list: Record<string, string>[] = [];
+  if (serviceData.table && serviceData.header) {
+    const header = serviceData.header;
+    const table = serviceData.table;
+
+    table.forEach((row) => {
+      const obj: Record<string, string> = {};
+      list.push(obj);
+      for (let j = 0; j < header.length; j++) {
+        const head = header[j];
+        obj[head] = row[j];
+      }
+    });
+  }
+  return list;
+}
+
+export function trim(str: string): string {
+  if (!str) {
+    return '';
+  }
+  return str.trim();
+}

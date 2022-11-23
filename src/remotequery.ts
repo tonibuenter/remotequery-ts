@@ -1,11 +1,11 @@
 /* WELCOME TO REMOTEQUERY for NODE JS */
-/* tslint:disable:no-string-literal */
 /* eslint-disable @typescript-eslint/no-explicit-any,@typescript-eslint/explicit-module-boundary-types */
 
 import {
   CommandsType,
   CondResult,
   Context,
+  Driver,
   exceptionResult,
   ExceptionResult,
   isError,
@@ -14,22 +14,12 @@ import {
   Request,
   Result,
   ResultX,
-  RqDriver,
   ServiceEntry,
-  StatementNode
-} from './remotequery-types';
-import {
-  consoleLogger,
-  deepClone,
-  isEmpty,
-  noopCommand,
-  resolveValue,
-  texting,
-  toArr,
+  StatementNode,
   toFirst,
-  tokenize,
   toList
-} from './utils';
+} from './remotequery-common';
+import { consoleLogger, deepClone, isEmpty, noopCommand, resolveValue, texting, tokenize } from './utils';
 
 const ANONYMOUS = 'ANONYMOUS';
 const MAX_RECURSION = 40;
@@ -50,9 +40,7 @@ export interface IRemoteQuery {
 
   processStatements(sqlStatements: string[]): Promise<Result[]>;
 
-  driver: RqDriver;
-
-  getServiceEntry: (serviceId: string) => Promise<ServiceEntry | ExceptionResult>;
+  driver: Driver;
 
   run: (request: Request) => Promise<ResultX>;
 
@@ -61,7 +49,7 @@ export interface IRemoteQuery {
 }
 
 export class RemoteQuery implements IRemoteQuery {
-  public driver: RqDriver;
+  public driver: Driver;
   private serviceEntrySql = '';
 
   public setServiceEntrySql(sql: string) {
@@ -90,37 +78,37 @@ export class RemoteQuery implements IRemoteQuery {
     Registry: { Node: {} }
   };
 
-  constructor(driver: RqDriver) {
+  constructor(driver: Driver) {
     this.driver = driver;
 
-    this.commands.Registry['serviceRoot'] = this.serviceRootCommand;
-    this.commands.Registry['sql'] = this.sqlCommand;
-    this.commands.Registry['set'] = this.setCommand;
+    this.commands.Registry.serviceRoot = this.serviceRootCommand;
+    this.commands.Registry.sql = this.sqlCommand;
+    this.commands.Registry.set = this.setCommand;
     this.commands.Registry['set-if-empty'] = this.setCommand;
-    this.commands.Registry['copy'] = this.setCommand;
+    this.commands.Registry.copy = this.setCommand;
     this.commands.Registry['copy-if-empty'] = this.setCommand;
-    this.commands.Registry['serviceId'] = this.serviceIdCommand;
-    this.commands.Registry['parameters'] = this.parametersCommand;
+    this.commands.Registry.serviceId = this.serviceIdCommand;
+    this.commands.Registry.parameters = this.parametersCommand;
     this.commands.Registry['parameters-if-empty'] = this.parametersCommand;
     this.commands.Registry['if-empty'] = this.ifCommand;
-    this.commands.Registry['switch'] = this.switchCommand;
-    this.commands.Registry['while'] = this.whileCommand;
-    this.commands.Registry['abort'] = this.abortCommand;
-    this.commands.Registry['comment'] = this.commentCommand;
-    this.commands.Registry['node'] = this.nodeCommand;
-    this.commands.Registry['java'] = this.nodeCommand;
-    this.commands.Registry['fi'] = noopCommand;
-    this.commands.Registry['end'] = noopCommand;
-    this.commands.Registry['done'] = noopCommand;
-    this.commands.Registry['then'] = noopCommand;
-    this.commands.Registry['else'] = noopCommand;
-    this.commands.Registry['case'] = noopCommand;
-    this.commands.Registry['default'] = noopCommand;
-    this.commands.Registry['break'] = noopCommand;
-    this.commands.Registry['do'] = noopCommand;
-    this.commands.Registry['python'] = noopCommand;
-    this.commands.Registry['class'] = noopCommand;
-    this.commands.Registry['include'] = noopCommand;
+    this.commands.Registry.switch = this.switchCommand;
+    this.commands.Registry.while = this.whileCommand;
+    this.commands.Registry.abort = this.abortCommand;
+    this.commands.Registry.comment = this.commentCommand;
+    this.commands.Registry.node = this.nodeCommand;
+    this.commands.Registry.java = this.nodeCommand;
+    this.commands.Registry.fi = noopCommand;
+    this.commands.Registry.end = noopCommand;
+    this.commands.Registry.done = noopCommand;
+    this.commands.Registry.then = noopCommand;
+    this.commands.Registry.else = noopCommand;
+    this.commands.Registry.case = noopCommand;
+    this.commands.Registry.default = noopCommand;
+    this.commands.Registry.break = noopCommand;
+    this.commands.Registry.do = noopCommand;
+    this.commands.Registry.python = noopCommand;
+    this.commands.Registry.class = noopCommand;
+    this.commands.Registry.include = noopCommand;
   }
 
   public addService(serviceEntry: ServiceEntry) {
@@ -130,18 +118,11 @@ export class RemoteQuery implements IRemoteQuery {
   public async getServiceEntry(serviceId: string): Promise<ServiceEntry | ExceptionResult> {
     let serviceEntry: ServiceEntry = this.directServices[serviceId];
     if (!serviceEntry) {
-      const result = await this.driver.processSql(this.serviceEntrySql, { serviceId });
-      const raw = toFirst(result);
-      if (!raw) {
-        return exceptionResult(`No service entry found for ${serviceId}`);
+      const r = await this.driver.getServiceEntry(serviceId);
+      if (isExceptionResult(r)) {
+        return r;
       }
-
-      serviceEntry = {
-        serviceId: raw.serviceId || 'notfound',
-        roles: toArr(raw.roles),
-        statements: raw.statements || '',
-        tags: new Set(toArr(raw.tags))
-      };
+      serviceEntry = r;
     }
 
     if (this.statementsPreprocessor) {
@@ -165,6 +146,7 @@ export class RemoteQuery implements IRemoteQuery {
     //
     // GET SERVICE
     //
+
     const serviceEntry = await this.getServiceEntry(request.serviceId);
     if (isExceptionResult(serviceEntry)) {
       const exception = serviceEntry.exception;

@@ -1,4 +1,4 @@
-import { isError, Logger, Result, ResultX } from './remotequery-types';
+import { isError, Logger, Result, ResultX } from './remotequery-common';
 import * as fs from 'fs';
 import { consoleLogger, processParameter } from './utils';
 import { RemoteQuery } from './remotequery';
@@ -57,6 +57,37 @@ export class RemoteQueryUtils implements IRemoteQueryUtils {
 
   isFilteredOut(ignoredErrors: string[], errorString: string): boolean {
     return (ignoredErrors || []).reduce((a: boolean, e: string) => errorString.includes(e) || a, false);
+  }
+
+  async processSqlText(statements: string, source: string): Promise<{ name: string; counter: number }> {
+    const gResult = { name: source || 'processSqlText-process', counter: 0 };
+
+    const lines = statements.split('\n');
+    let sqlStatement = '';
+    for (let i = 0; i < lines.length; i++) {
+      const origLine = lines[i];
+      const line = lines[i].trim();
+      // comment
+      if (line.startsWith('--') || !line) {
+        continue;
+      }
+      // sqlStatement end
+      if (line.endsWith(';')) {
+        sqlStatement += line.substring(0, line.length - 1) + '\n';
+        try {
+          const [result] = await this.rq.processStatements([sqlStatement]);
+          this.logResult(result);
+          gResult.counter++;
+        } catch (e) {
+          this.logger.error(source + ':' + i + ': ' + e);
+        }
+        sqlStatement = '';
+        continue;
+      }
+      sqlStatement += origLine + '\n';
+    }
+    this.logger.info(source + ' : ' + gResult.counter + ' sql statements done.');
+    return gResult;
   }
 
   async processRqSqlText(rqSqlText: string, source: string): Promise<GResult> {
@@ -136,7 +167,7 @@ export class RemoteQueryUtils implements IRemoteQueryUtils {
               const text = fs.readFileSync(sqlDir + '/' + filename, 'utf8');
               logger.debug(text);
               // TODO let result =
-              await this.processRqSqlText(text, filename);
+              await this.processSqlText(text, filename);
             }
           } catch (err) {
             this.filteredError(err);

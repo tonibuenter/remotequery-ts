@@ -1,4 +1,4 @@
-import { Logger, Request, Result, Simple } from './remotequery-types';
+import { Logger, Request, Result, Simple, toList, trim } from './remotequery-common';
 
 export const consoleLogger: Logger = {
   // tslint:disable-next-line:no-console
@@ -60,23 +60,12 @@ export function tokenize(str: string, del: string, esc: string): string[] {
   return tokens;
 }
 
-export function toArr(ro: string | undefined): string[] {
-  return (ro ? ro.split(/\s*,\s*/) : []).map((s) => trim(s));
-}
-
 export function noopCommand(_: Request, currentResult: Result): Result {
   return currentResult;
 }
 
 export function isEmpty(e: undefined | null | string | Simple[]): boolean {
   return !e || (Array.isArray(e) && e.length === 0);
-}
-
-export function trim(str: string): string {
-  if (!str) {
-    return '';
-  }
-  return str.trim();
 }
 
 export function deepClone<O = never>(jsonObject: O): O {
@@ -114,10 +103,6 @@ export function toMap(data: Result, column: string): Record<string, Record<strin
   return r;
 }
 
-export function toFirst(serviceData: Result): Record<string, string> | undefined {
-  return toList(serviceData)[0];
-}
-
 export function texting(templateString: string, map: Record<string, Simple>): string {
   if (typeof map !== 'object') {
     return templateString;
@@ -144,25 +129,4 @@ export function toColumnList(data: Result | Record<string, string>[], columnName
     }
   }
   return columnList;
-}
-
-export function toList(serviceData: Result): Record<string, string>[] {
-  if (Array.isArray(serviceData)) {
-    return serviceData;
-  }
-  const list: Record<string, string>[] = [];
-  if (serviceData.table && serviceData.header) {
-    const header = serviceData.header;
-    const table = serviceData.table;
-
-    table.forEach((row) => {
-      const obj: Record<string, string> = {};
-      list.push(obj);
-      for (let j = 0; j < header.length; j++) {
-        const head = header[j];
-        obj[head] = row[j];
-      }
-    });
-  }
-  return list;
 }
