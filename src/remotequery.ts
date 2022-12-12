@@ -4,6 +4,7 @@
 import {
   CommandsType,
   CondResult,
+  consoleLogger,
   Context,
   Driver,
   exceptionResult,
@@ -11,6 +12,7 @@ import {
   isError,
   isExceptionResult,
   Logger,
+  RegistryArgFun,
   Request,
   Result,
   ResultX,
@@ -18,15 +20,14 @@ import {
   StatementNode,
   toFirst,
   toList
-} from './remotequery-common';
-import { consoleLogger, deepClone, isEmpty, noopCommand, resolveValue, texting, tokenize } from './utils';
+} from 'remotequery-ts-common';
+import { deepClone, identCommand, isEmpty, resolveValue, texting, tokenize } from './utils';
+import { processRqSqlCommand } from './rq_sql_command';
 
 const ANONYMOUS = 'ANONYMOUS';
 const MAX_RECURSION = 40;
 const MAX_INCLUDES = 100;
 const MAX_WHILE = 100000;
-const STATEMENT_DELIMITER = ';';
-const STATEMENT_ESCAPE = '\\';
 let CONTEXT_COUNTER = 1;
 
 type StatementPreprocessor = (statements: string) => string;
@@ -40,6 +41,8 @@ export interface IRemoteQuery {
 
   processStatements(sqlStatements: string[]): Promise<Result[]>;
 
+  registerNode: (name: string, fun: RegistryArgFun) => void;
+
   driver: Driver;
 
   run: (request: Request) => Promise<ResultX>;
@@ -51,6 +54,7 @@ export interface IRemoteQuery {
 export class RemoteQuery implements IRemoteQuery {
   public driver: Driver;
   private serviceEntrySql = '';
+  public rqCommandName = '';
 
   public setServiceEntrySql(sql: string) {
     this.serviceEntrySql = sql;
@@ -75,7 +79,8 @@ export class RemoteQuery implements IRemoteQuery {
       done: true,
       end: true
     },
-    Registry: { Node: {} }
+    Registry: {},
+    Node: {}
   };
 
   constructor(driver: Driver) {
@@ -93,22 +98,29 @@ export class RemoteQuery implements IRemoteQuery {
     this.commands.Registry['if-empty'] = this.ifCommand;
     this.commands.Registry.switch = this.switchCommand;
     this.commands.Registry.while = this.whileCommand;
-    this.commands.Registry.abort = this.abortCommand;
     this.commands.Registry.comment = this.commentCommand;
     this.commands.Registry.node = this.nodeCommand;
     this.commands.Registry.java = this.nodeCommand;
-    this.commands.Registry.fi = noopCommand;
-    this.commands.Registry.end = noopCommand;
-    this.commands.Registry.done = noopCommand;
-    this.commands.Registry.then = noopCommand;
-    this.commands.Registry.else = noopCommand;
-    this.commands.Registry.case = noopCommand;
-    this.commands.Registry.default = noopCommand;
-    this.commands.Registry.break = noopCommand;
-    this.commands.Registry.do = noopCommand;
-    this.commands.Registry.python = noopCommand;
-    this.commands.Registry.class = noopCommand;
-    this.commands.Registry.include = noopCommand;
+    this.commands.Registry.fi = identCommand;
+    this.commands.Registry.end = identCommand;
+    this.commands.Registry.done = identCommand;
+    this.commands.Registry.then = identCommand;
+    this.commands.Registry.else = identCommand;
+    this.commands.Registry.case = identCommand;
+    this.commands.Registry.default = identCommand;
+    this.commands.Registry.break = identCommand;
+    this.commands.Registry.do = identCommand;
+    this.commands.Registry.python = identCommand;
+    this.commands.Registry.class = identCommand;
+    this.commands.Registry.include = identCommand;
+  }
+
+  public registerNode(name: string, fun: RegistryArgFun) {
+    this.commands.Node[name] = fun;
+  }
+
+  public setRqCommandName(columnName: string) {
+    this.rqCommandName = columnName;
   }
 
   public addService(serviceEntry: ServiceEntry) {
@@ -135,7 +147,7 @@ export class RemoteQuery implements IRemoteQuery {
     this.statementsPreprocessor = preprocessor;
   }
 
-  async runIntern(request: Request, context: Context): Promise<Result> {
+  async runIntern(request: Request, context: Context): Promise<Result | undefined> {
     if (!request.userId) {
       this.logger.warn(`Request has no userId set. Process continues with userId: ${ANONYMOUS} (${request.serviceId})`);
       request.userId = ANONYMOUS;
@@ -204,17 +216,19 @@ export class RemoteQuery implements IRemoteQuery {
 
     const result = await this.runIntern(request, context);
 
+    const result2 = result || (exceptionResult('Unexpected empty result!') as Result);
+
     return {
       ...result,
-      list: () => toList(result),
-      first: () => toList(result)[0],
-      single: () => (result.table ? result.table[0][0] : undefined)
+      list: () => toList(result2),
+      first: () => toList(result2)[0],
+      single: () => (result2.table ? result2.table[0][0] : undefined)
     };
   }
 
   buildCommandBlockTree(root: StatementNode, statementList: string[], pointer: number) {
     while (pointer < statementList.length) {
-      const statementNode = this.parse_statement(statementList[pointer]);
+      const statementNode = this.parseStatement(statementList[pointer]);
       pointer = pointer + 1;
       if (!statementNode) {
         continue;
@@ -237,7 +251,7 @@ export class RemoteQuery implements IRemoteQuery {
   async resolveIncludes(serviceEntry: ServiceEntry, context: Context) {
     const statements = serviceEntry.statements;
 
-    const statementList = tokenize(statements.trim(), STATEMENT_DELIMITER, STATEMENT_ESCAPE);
+    const statementList = tokenize(statements);
     const resolvedList: string[] = [];
 
     for (const s0 of statementList) {
@@ -251,7 +265,7 @@ export class RemoteQuery implements IRemoteQuery {
     const _inc = 'include';
     if (stmt.substring(0, _inc.length) === _inc) {
       let serviceId = '';
-      const parsed = this.parse_statement(stmt);
+      const parsed = this.parseStatement(stmt);
       if (parsed === null) {
         return;
       }
@@ -296,7 +310,7 @@ export class RemoteQuery implements IRemoteQuery {
     currentResult: CondResult,
     serviceEntry: ServiceEntry,
     context: Context
-  ) {
+  ): Promise<Result | undefined> {
     context.recursion++;
 
     if (context.recursion > MAX_RECURSION) {
@@ -328,13 +342,10 @@ export class RemoteQuery implements IRemoteQuery {
     statementNode: StatementNode,
     serviceEntry: ServiceEntry,
     context: Context
-  ) {
+  ): Promise<Result | undefined> {
     try {
       for (const snChild of statementNode.children || []) {
         const r = await this.processCommandBlock(snChild, request, currentResult, serviceEntry, context);
-        if (r === 'abort') {
-          return currentResult;
-        }
         currentResult = r || currentResult;
       }
       return currentResult;
@@ -351,13 +362,20 @@ export class RemoteQuery implements IRemoteQuery {
     statementNode: StatementNode,
     serviceEntry: ServiceEntry,
     context: Context
-  ) {
-    return this.driver.processSql(statementNode.parameter, request.parameters, { serviceEntry, context });
+  ): Promise<Result> {
+    const result = await this.driver.processSql(statementNode.parameter, request.parameters, {
+      ...context,
+      serviceEntry
+    });
+    if (this.rqCommandName) {
+      return processRqSqlCommand(result, request, context, this);
+    }
+    return result;
   }
 
   async setCommand(request: Request, currentResult: Result, statementNode: StatementNode) {
     const overwrite = statementNode.cmd === 'set' || statementNode.cmd === 'copy';
-    const nv = tokenize(statementNode.parameter, '=', '\\');
+    const nv = statementNode.parameter.split(/=/);
     const n = nv[0].trim();
     let v = nv.length > 1 ? nv[1] : '';
 
@@ -388,10 +406,10 @@ export class RemoteQuery implements IRemoteQuery {
     statementNodeIn: StatementNode,
     serviceEntry: ServiceEntry,
     context: Context
-  ) {
+  ): Promise<Result> {
     const overwrite = statementNodeIn.cmd === 'parameters';
 
-    const statementNode = this.parse_statement(statementNodeIn.parameter);
+    const statementNode = this.parseStatement(statementNodeIn.parameter);
     if (statementNode === null) {
       return currentResult;
     }
@@ -502,10 +520,6 @@ export class RemoteQuery implements IRemoteQuery {
     return currentResult;
   }
 
-  abortCommand() {
-    return 'abort';
-  }
-
   async commentCommand(request: Request, currentResult: Result, statementNode: StatementNode) {
     if (!statementNode.parameter) {
       const comment = texting(statementNode.parameter, request.parameters);
@@ -521,7 +535,7 @@ export class RemoteQuery implements IRemoteQuery {
     serviceEntry: ServiceEntry,
     context: Context
   ) {
-    const fun = this.commands.Registry.Node[statementNode.parameter];
+    const fun = this.commands.Node[statementNode.parameter];
     if (!fun) {
       this.logger.error(`No Commands.Registry.node entry found for ${statementNode.parameter}`);
       return currentResult;
@@ -536,7 +550,7 @@ export class RemoteQuery implements IRemoteQuery {
   //
   //
 
-  parse_statement(statement: string): StatementNode | null {
+  parseStatement(statement: string): StatementNode | null {
     statement = statement.trim();
     if (isEmpty(statement)) {
       return null;
@@ -581,12 +595,12 @@ export class RemoteQuery implements IRemoteQuery {
   // FROM remotequery-0.9.0.js
   //
 
-  filteredError(_error: any) {
+  filteredError(_error: unknown) {
     let finalError = '';
     if (_error) {
       if (typeof _error === 'string') {
         finalError = _error;
-      } else if (typeof _error === 'object' && _error.message) {
+      } else if (isError(_error)) {
         finalError = _error.message;
       } else if (typeof _error === 'object') {
         finalError = _error.toString();

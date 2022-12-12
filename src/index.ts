@@ -1,26 +1,28 @@
 import {
-  toList,
-  toFirst,
   CommandsType,
   ConfigType,
+  consoleLogger,
   Context,
+  Driver,
   EmtpyResult,
   EndBlockType,
   isExceptionResult,
   Logger,
   LoggerFun,
   LoggerLevel,
+  noopLogger,
   ProcessSql,
   RegistryType,
   Request,
   Result,
   ResultX,
-  Driver,
   ServiceEntry,
   StartBlockType,
-  StatementNode
-} from './remotequery-common';
-import { consoleLogger, toColumnList, tokenize, toMap } from './utils';
+  StatementNode,
+  toFirst,
+  toList
+} from 'remotequery-ts-common';
+import { toColumnList, tokenize, toMap } from './utils';
 
 import { RemoteQuery } from './remotequery';
 import { RemoteQueryUtils } from './remotequery-utils';
@@ -30,6 +32,7 @@ export type { Result, ResultX };
 export {
   isExceptionResult,
   consoleLogger,
+  noopLogger,
   Logger,
   LoggerFun,
   LoggerLevel,

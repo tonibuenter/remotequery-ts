@@ -1,13 +1,12 @@
-import { isError, Logger, Result, ResultX } from './remotequery-common';
+import { consoleLogger, isError, Logger, Result, ResultX } from 'remotequery-ts-common';
 import * as fs from 'fs';
-import { consoleLogger, processParameter } from './utils';
+import { processParameter } from './utils';
 import { RemoteQuery } from './remotequery';
 
 type GResult = { name: string; counter: number };
 
 export interface IRemoteQueryUtils {
   processRqSqlText(rqSqlText: string, source: string): Promise<GResult>;
-
   initRepository(sqlDirectories: string[], tags: string[], logger: Logger): Promise<void>;
 }
 

@@ -1,67 +1,12 @@
-import { Logger, Request, Result, Simple, toList, trim } from './remotequery-common';
+import { Request, Result, ServiceEntry, Simple, toList, trim } from 'remotequery-ts-common';
 
-export const consoleLogger: Logger = {
-  // tslint:disable-next-line:no-console
-  debug: (msg: string) => console.debug(msg),
-  // tslint:disable-next-line:no-console
-  info: (msg: string) => console.info(msg),
-  // tslint:disable-next-line:no-console
-  warn: (msg: string) => console.warn(msg),
-  // tslint:disable-next-line:no-console
-  error: (msg: string) => console.error(msg)
-};
-
-export function tokenize(str: string, del: string, esc: string): string[] {
-  if (!str) {
-    return [];
-  }
-  // first we count the tokens
-  let inescape = false;
-  let pc = '';
-  let buf = '';
-  for (const c of str) {
-    if (c === del && !inescape) {
-      continue;
-    }
-    if (c === esc && !inescape) {
-      inescape = true;
-      continue;
-    }
-    inescape = false;
-  }
-  const tokens = [];
-
-  // now we collect the characters and create all tokens
-  let k = 0;
-  for (const c of str) {
-    if (c === del && !inescape) {
-      tokens[k] = buf;
-      buf = '';
-      k++;
-      pc = c;
-      continue;
-    }
-    if (c === esc && !inescape) {
-      inescape = true;
-      pc = c;
-      continue;
-    }
-    //
-    // append
-    //
-    if (c !== del && pc === esc) {
-      buf += pc;
-    }
-    buf += c;
-    pc = c;
-    inescape = false;
-  }
-  tokens[k] = buf;
-  return tokens;
+export function tokenize(str: string): string[] {
+  const rx = /(\\.|[^;])+/gmu;
+  return (str.match(rx) || []).map((t) => t.trim().replace('\\;', ';'));
 }
 
-export function noopCommand(_: Request, currentResult: Result): Result {
-  return currentResult;
+export async function identCommand(_: Request, currentResult: Result): Promise<Result> {
+  return Promise.resolve(currentResult);
 }
 
 export function isEmpty(e: undefined | null | string | Simple[]): boolean {
@@ -129,4 +74,13 @@ export function toColumnList(data: Result | Record<string, string>[], columnName
     }
   }
   return columnList;
+}
+
+export function dummyServiceEntry(): ServiceEntry {
+  return {
+    serviceId: 'dummy',
+    roles: [],
+    statements: '',
+    tags: new Set<string>('dummy')
+  };
 }
