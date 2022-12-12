@@ -1,6 +1,5 @@
 import {
   CommandsType,
-  ConfigType,
   consoleLogger,
   Context,
   Driver,
@@ -44,7 +43,6 @@ export {
   Request,
   Context,
   ProcessSql,
-  ConfigType,
   ServiceEntry,
   StatementNode,
   EmtpyResult,

@@ -1,6 +1,5 @@
 import { Context, Request, Result, toList } from 'remotequery-ts-common';
 import { RemoteQuery } from './remotequery';
-import { dummyServiceEntry } from './utils';
 
 type RqCommandName = 'set' | 'set-if-empty' | 'serviceId' | 'sql';
 

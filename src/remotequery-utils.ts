@@ -7,6 +7,7 @@ type GResult = { name: string; counter: number };
 
 export interface IRemoteQueryUtils {
   processRqSqlText(rqSqlText: string, source: string): Promise<GResult>;
+
   initRepository(sqlDirectories: string[], tags: string[], logger: Logger): Promise<void>;
 }
 

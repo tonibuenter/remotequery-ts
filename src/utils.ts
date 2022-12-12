@@ -1,11 +1,11 @@
-import { Request, Result, ServiceEntry, Simple, toList, trim } from 'remotequery-ts-common';
+import { RegistryObj, Request, Result, Simple, toList, trim } from 'remotequery-ts-common';
 
 export function tokenize(str: string): string[] {
   const rx = /(\\.|[^;])+/gmu;
   return (str.match(rx) || []).map((t) => t.trim().replace('\\;', ';'));
 }
 
-export async function identCommand(_: Request, currentResult: Result): Promise<Result> {
+export async function identCommand({ currentResult }: RegistryObj): Promise<Result> {
   return Promise.resolve(currentResult);
 }
 
@@ -74,13 +74,4 @@ export function toColumnList(data: Result | Record<string, string>[], columnName
     }
   }
   return columnList;
-}
-
-export function dummyServiceEntry(): ServiceEntry {
-  return {
-    serviceId: 'dummy',
-    roles: [],
-    statements: '',
-    tags: new Set<string>('dummy')
-  };
 }

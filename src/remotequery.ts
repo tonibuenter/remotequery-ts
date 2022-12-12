@@ -3,7 +3,6 @@
 
 import {
   CommandsType,
-  CondResult,
   consoleLogger,
   Context,
   Driver,
@@ -12,17 +11,18 @@ import {
   isError,
   isExceptionResult,
   Logger,
-  RegistryArgFun,
+  RegistryObj,
   Request,
   Result,
   ResultX,
   ServiceEntry,
   StatementNode,
   toFirst,
-  toList
+  toList,
+  RegistryObjFun
 } from 'remotequery-ts-common';
 import { deepClone, identCommand, isEmpty, resolveValue, texting, tokenize } from './utils';
-import { processRqSqlCommand } from './rq_sql_command';
+import { processRqSqlCommand } from './rq-sql-command';
 
 const ANONYMOUS = 'ANONYMOUS';
 const MAX_RECURSION = 40;
@@ -41,7 +41,7 @@ export interface IRemoteQuery {
 
   processStatements(sqlStatements: string[]): Promise<Result[]>;
 
-  registerNode: (name: string, fun: RegistryArgFun) => void;
+  registerNode: (name: string, fun: RegistryObjFun) => void;
 
   driver: Driver;
 
@@ -115,7 +115,7 @@ export class RemoteQuery implements IRemoteQuery {
     this.commands.Registry.include = identCommand;
   }
 
-  public registerNode(name: string, fun: RegistryArgFun) {
+  public registerNode(name: string, fun: RegistryObjFun) {
     this.commands.Node[name] = fun;
   }
 
@@ -200,7 +200,7 @@ export class RemoteQuery implements IRemoteQuery {
       return serviceEntry.serviceFunction(request, context);
     }
     const statementNode = await this.prepareCommandBlock(serviceEntry, context);
-    return this.processCommandBlock(statementNode, request, {}, serviceEntry, context);
+    return this.processCommandBlock({ statementNode, request, currentResult: {}, serviceEntry, context });
   }
 
   async run(request: Request): Promise<ResultX> {
@@ -304,13 +304,13 @@ export class RemoteQuery implements IRemoteQuery {
     return statementNode;
   }
 
-  async processCommandBlock(
-    statementNode: StatementNode,
-    request: Request,
-    currentResult: CondResult,
-    serviceEntry: ServiceEntry,
-    context: Context
-  ): Promise<Result | undefined> {
+  async processCommandBlock({
+    request,
+    currentResult,
+    statementNode,
+    serviceEntry,
+    context
+  }: RegistryObj): Promise<Result | undefined> {
     context.recursion++;
 
     if (context.recursion > MAX_RECURSION) {
@@ -324,7 +324,7 @@ export class RemoteQuery implements IRemoteQuery {
 
     if (typeof fun === 'function') {
       try {
-        return await fun.bind(this)(request, currentResult, statementNode, serviceEntry, context);
+        return await fun.bind(this)({ request, currentResult, statementNode, serviceEntry, context });
       } catch (e) {
         return exceptionResult(e);
       } finally {
@@ -336,16 +336,22 @@ export class RemoteQuery implements IRemoteQuery {
     }
   }
 
-  async serviceRootCommand(
-    request: Request,
-    currentResult: Result,
-    statementNode: StatementNode,
-    serviceEntry: ServiceEntry,
-    context: Context
-  ): Promise<Result | undefined> {
+  async serviceRootCommand({
+    request,
+    currentResult,
+    statementNode,
+    serviceEntry,
+    context
+  }: RegistryObj): Promise<Result | undefined> {
     try {
       for (const snChild of statementNode.children || []) {
-        const r = await this.processCommandBlock(snChild, request, currentResult, serviceEntry, context);
+        const r = await this.processCommandBlock({
+          statementNode: snChild,
+          request,
+          currentResult,
+          serviceEntry,
+          context
+        });
         currentResult = r || currentResult;
       }
       return currentResult;
@@ -356,13 +362,7 @@ export class RemoteQuery implements IRemoteQuery {
     }
   }
 
-  async sqlCommand(
-    request: Request,
-    _currentResult: Result,
-    statementNode: StatementNode,
-    serviceEntry: ServiceEntry,
-    context: Context
-  ): Promise<Result> {
+  async sqlCommand({ request, statementNode, serviceEntry, context }: RegistryObj): Promise<Result> {
     const result = await this.driver.processSql(statementNode.parameter, request.parameters, {
       ...context,
       serviceEntry
@@ -373,7 +373,7 @@ export class RemoteQuery implements IRemoteQuery {
     return result;
   }
 
-  async setCommand(request: Request, currentResult: Result, statementNode: StatementNode) {
+  async setCommand({ request, currentResult, statementNode }: RegistryObj) {
     const overwrite = statementNode.cmd === 'set' || statementNode.cmd === 'copy';
     const nv = statementNode.parameter.split(/=/);
     const n = nv[0].trim();
@@ -388,33 +388,33 @@ export class RemoteQuery implements IRemoteQuery {
     return currentResult;
   }
 
-  async serviceIdCommand(
-    request: Request,
-    _currentResult: Result,
-    statementNode: StatementNode,
-    _serviceEntry: ServiceEntry,
-    context: Context
-  ) {
+  async serviceIdCommand({ request, statementNode, context }: RegistryObj) {
     const iRequest = deepClone(request);
     iRequest.serviceId = statementNode.parameter;
     return this.runIntern(iRequest, context);
   }
 
-  async parametersCommand(
-    request: Request,
-    currentResult: Result,
-    statementNodeIn: StatementNode,
-    serviceEntry: ServiceEntry,
-    context: Context
-  ): Promise<Result> {
-    const overwrite = statementNodeIn.cmd === 'parameters';
+  async parametersCommand({
+    request,
+    currentResult,
+    statementNode,
+    serviceEntry,
+    context
+  }: RegistryObj): Promise<Result> {
+    const overwrite = statementNode.cmd === 'parameters';
 
-    const statementNode = this.parseStatement(statementNodeIn.parameter);
-    if (statementNode === null) {
+    const statementNode1 = this.parseStatement(statementNode.parameter);
+    if (statementNode1 === null) {
       return currentResult;
     }
 
-    const result = await this.processCommandBlock(statementNode, request, currentResult, serviceEntry, context);
+    const result = await this.processCommandBlock({
+      statementNode: statementNode1,
+      request,
+      currentResult,
+      serviceEntry,
+      context
+    });
     if (!result || !result.header || result.header.length === 0) {
       return currentResult;
     }
@@ -434,13 +434,7 @@ export class RemoteQuery implements IRemoteQuery {
     return currentResult;
   }
 
-  async ifCommand(
-    request: Request,
-    currentResult: Result,
-    statementNode: StatementNode,
-    serviceEntry: ServiceEntry,
-    context: Context
-  ) {
+  async ifCommand({ statementNode, request, currentResult, serviceEntry, context }: RegistryObj) {
     const ifEmpty = statementNode.cmd === 'if-empty';
 
     const condition = resolveValue(statementNode.parameter, request);
@@ -454,7 +448,13 @@ export class RemoteQuery implements IRemoteQuery {
         continue;
       }
       if (isThen) {
-        const r = await this.processCommandBlock(cbChild, request, currentResult, serviceEntry, context);
+        const r = await this.processCommandBlock({
+          statementNode: cbChild,
+          request,
+          currentResult,
+          serviceEntry,
+          context
+        });
         currentResult = r || currentResult;
       }
     }
@@ -462,13 +462,7 @@ export class RemoteQuery implements IRemoteQuery {
     return currentResult;
   }
 
-  async switchCommand(
-    request: Request,
-    currentResult: Result,
-    statementNode: StatementNode,
-    serviceEntry: ServiceEntry,
-    context: Context
-  ) {
+  async switchCommand({ statementNode, request, currentResult, serviceEntry, context }: RegistryObj) {
     const switchValue = resolveValue(statementNode.parameter, request);
     let inSwitch = false;
     let caseFound = false;
@@ -491,20 +485,20 @@ export class RemoteQuery implements IRemoteQuery {
       }
 
       if (inSwitch) {
-        const r = await this.processCommandBlock(cbChild, request, currentResult, serviceEntry, context);
+        const r = await this.processCommandBlock({
+          statementNode: cbChild,
+          request,
+          currentResult,
+          serviceEntry,
+          context
+        });
         currentResult = r || currentResult;
       }
     }
     return currentResult;
   }
 
-  async whileCommand(
-    request: Request,
-    currentResult: Result,
-    statementNode: StatementNode,
-    serviceEntry: ServiceEntry,
-    context: Context
-  ) {
+  async whileCommand({ statementNode, request, currentResult, serviceEntry, context }: RegistryObj) {
     let counter = 0;
     while (counter < MAX_WHILE) {
       const whileCondition = resolveValue(statementNode.parameter, request);
@@ -513,14 +507,20 @@ export class RemoteQuery implements IRemoteQuery {
       }
       counter++;
       for (const cbChild of statementNode.children || []) {
-        const r = await this.processCommandBlock(cbChild, request, currentResult, serviceEntry, context);
+        const r = await this.processCommandBlock({
+          statementNode: cbChild,
+          request,
+          currentResult,
+          serviceEntry,
+          context
+        });
         currentResult = r == null ? currentResult : r;
       }
     }
     return currentResult;
   }
 
-  async commentCommand(request: Request, currentResult: Result, statementNode: StatementNode) {
+  async commentCommand({ statementNode, request, currentResult }: RegistryObj) {
     if (!statementNode.parameter) {
       const comment = texting(statementNode.parameter, request.parameters);
       this.logger.info(comment);
@@ -528,19 +528,13 @@ export class RemoteQuery implements IRemoteQuery {
     return currentResult;
   }
 
-  async nodeCommand(
-    request: Request,
-    currentResult: Result,
-    statementNode: StatementNode,
-    serviceEntry: ServiceEntry,
-    context: Context
-  ) {
+  async nodeCommand({ request, currentResult, statementNode, serviceEntry, context }: RegistryObj) {
     const fun = this.commands.Node[statementNode.parameter];
     if (!fun) {
       this.logger.error(`No Commands.Registry.node entry found for ${statementNode.parameter}`);
       return currentResult;
     }
-    const result = await fun(request, currentResult, statementNode, serviceEntry, context);
+    const result = await fun({ request, currentResult, statementNode, serviceEntry, context });
     return result || currentResult;
   }
 
