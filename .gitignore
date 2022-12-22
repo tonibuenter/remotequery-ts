@@ -10,7 +10,6 @@ package-lock.json
 
 local/
 
-test/
 
 # Runtime data
 pids
