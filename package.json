@@ -1,6 +1,6 @@
 {
   "name": "remotequery-ts",
-  "version": "0.0.24",
+  "version": "0.0.25",
   "description": "Remotequery for TypeScript",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,7 +17,7 @@
     "url": "git+https://github.com/tonibuenter/remotequery-ts.git"
   },
   "files": [
-    "lib/**/*"
+    "dist/**/*"
   ],
   "keywords": [
     "SQL",
