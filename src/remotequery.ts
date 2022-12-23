@@ -12,14 +12,14 @@ import {
   isExceptionResult,
   Logger,
   RegistryObj,
+  RegistryObjFun,
   Request,
   Result,
   ResultX,
   ServiceEntry,
   StatementNode,
   toFirst,
-  toList,
-  RegistryObjFun
+  toList
 } from 'remotequery-ts-common';
 import { deepClone, identCommand, isEmpty, resolveValue, texting, tokenize } from './utils';
 import { processRqSqlCommand } from './rq-sql-command';
@@ -37,8 +37,6 @@ export interface IRemoteQuery {
 
   setStatementsPreprocessor: (statementPreprocessor: StatementPreprocessor) => void;
 
-  setServiceEntrySql: (sql: string) => void;
-
   processStatements(sqlStatements: string[]): Promise<Result[]>;
 
   registerNode: (name: string, fun: RegistryObjFun) => void;
@@ -53,12 +51,7 @@ export interface IRemoteQuery {
 
 export class RemoteQuery implements IRemoteQuery {
   public driver: Driver;
-  private serviceEntrySql = '';
   public rqCommandName = '';
-
-  public setServiceEntrySql(sql: string) {
-    this.serviceEntrySql = sql;
-  }
 
   private statementsPreprocessor: StatementPreprocessor = (s) => s;
   private logger = consoleLogger;
@@ -203,8 +196,9 @@ export class RemoteQuery implements IRemoteQuery {
     return this.processCommandBlock({ statementNode, request, currentResult: {}, serviceEntry, context });
   }
 
-  async run(request: Request): Promise<ResultX> {
+  async run(request: Request, contextIn: Partial<Context> = {}): Promise<ResultX> {
     const context: Context = {
+      ...contextIn,
       recursion: 0,
       contextId: CONTEXT_COUNTER++,
       rowsAffectedList: [],
