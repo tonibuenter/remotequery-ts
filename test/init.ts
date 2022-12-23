@@ -2,7 +2,7 @@
 import path from 'path';
 import { MySqlDriver } from 'remotequery-ts-mysql';
 import { Driver, Logger, RemoteQuery, RemoteQueryUtils } from '../src';
-import { consoleLogger } from 'remotequery-ts-mysql/lib/remotequery-common';
+import { consoleLogger } from 'remotequery-ts-common';
 import { initServices } from './init-services';
 
 const repoDirs = [path.join(__dirname, './sql')];
