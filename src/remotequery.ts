@@ -190,7 +190,7 @@ export class RemoteQuery implements IRemoteQuery {
     this.logger.info(`Service ${serviceEntry.serviceId} found for ${request.userId}`);
     context.serviceEntry = serviceEntry;
     if (typeof serviceEntry.serviceFunction === 'function') {
-      return serviceEntry.serviceFunction(request, context);
+      return serviceEntry.serviceFunction({ request, context });
     }
     const statementNode = await this.prepareCommandBlock(serviceEntry, context);
     return this.processCommandBlock({ statementNode, request, currentResult: {}, serviceEntry, context });

@@ -1,4 +1,4 @@
-import { RegistryObj, Request, Result, Simple, toList, trim } from 'remotequery-ts-common';
+import { RegistryObj, Request, Result, SRecord, toList, trim } from 'remotequery-ts-common';
 
 export function tokenize(str: string): string[] {
   const rx = /(\\.|[^;])+/gmu;
@@ -9,7 +9,7 @@ export async function identCommand({ currentResult }: RegistryObj): Promise<Resu
   return Promise.resolve(currentResult);
 }
 
-export function isEmpty(e: undefined | null | string | Simple[]): boolean {
+export function isEmpty(e: undefined | null | string | SRecord): boolean {
   return !e || (Array.isArray(e) && e.length === 0);
 }
 
@@ -18,7 +18,7 @@ export function deepClone<O = never>(jsonObject: O): O {
   return JSON.parse(s);
 }
 
-export function processParameter(parameters: Record<string, Simple>, line: string): void {
+export function processParameter(parameters: SRecord, line: string): void {
   const p = line.split('=');
   if (p.length > 1) {
     const name = trim(p[0]);
@@ -26,7 +26,7 @@ export function processParameter(parameters: Record<string, Simple>, line: strin
   }
 }
 
-export function resolveValue(term: string, request: Request): Simple {
+export function resolveValue(term: string, request: Request): string {
   term = trim(term);
   if (term.charAt(0) === ':') {
     return request.parameters[term.substring(1)] || '';
@@ -48,7 +48,7 @@ export function toMap(data: Result, column: string): Record<string, Record<strin
   return r;
 }
 
-export function texting(templateString: string, map: Record<string, Simple>): string {
+export function texting(templateString: string, map: SRecord): string {
   if (typeof map !== 'object') {
     return templateString;
   }
