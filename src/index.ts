@@ -14,7 +14,6 @@ import {
   RegistryType,
   Request,
   Result,
-  ResultX,
   ServiceEntry,
   StartBlockType,
   StatementNode,
@@ -26,7 +25,7 @@ import { toColumnList, tokenize, toMap } from './utils';
 import { RemoteQuery } from './remotequery';
 import { RemoteQueryUtils } from './remotequery-utils';
 
-export type { Result, ResultX };
+export type { Result };
 
 export {
   isExceptionResult,

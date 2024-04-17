@@ -12,36 +12,3 @@ where name = 'hello-command-test'
 ;
 
 
-
---
--- SERVICE_ID = rqSqlCommand.test2
---
-
-insert into T_APP_PROPERTIES (name, value)
-values ('hans', 'müller')
-;
-select 'set-if-empty' as cmd, name, value
-from T_APP_PROPERTIES
-where NAME = 'hans'
-;
-delete
-from T_APP_PROPERTIES
-where NAME = 'hans'
-;
-select :hans as value
-;
-
-
-
-
---
--- SERVICE_ID = rqSqlCommand.test3
---
-
-select 'set' as cmd, 'name' as name, 'müller' as value
-;
-select 'set-if-empty' as cmd, 'name' as name, 'huber' as value
-;
-select :name as value
-;
-

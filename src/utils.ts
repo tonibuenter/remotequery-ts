@@ -1,6 +1,6 @@
-import { RegistryObj, Request, Result, SRecord, toList, trim } from 'remotequery-ts-common';
+import { PRecord, RegistryObj, Request, Result, SRecord, toList, trim } from 'remotequery-ts-common';
 
-export function tokenize(str: string): string[] {
+export function tokenize(str = ''): string[] {
   const rx = /(\\.|[^;])+/gmu;
   return (str.match(rx) || []).map((t) => t.trim().replace('\\;', ';'));
 }
@@ -29,7 +29,7 @@ export function processParameter(parameters: SRecord, line: string): void {
 export function resolveValue(term: string, request: Request): string {
   term = trim(term);
   if (term.charAt(0) === ':') {
-    return request.parameters[term.substring(1)] || '';
+    return (request.parameters[term.substring(1)] || '').toString();
   }
   if (term.length > 1 && term.charAt(0) === "'" && term.charAt(term.length - 1) === "'") {
     return term.substring(1, term.length - 1);
@@ -48,7 +48,7 @@ export function toMap(data: Result, column: string): Record<string, Record<strin
   return r;
 }
 
-export function texting(templateString: string, map: SRecord): string {
+export function texting(templateString: string, map: PRecord): string {
   if (typeof map !== 'object') {
     return templateString;
   }

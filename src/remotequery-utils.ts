@@ -1,4 +1,4 @@
-import { consoleLogger, isError, Logger, Result, ResultX } from 'remotequery-ts-common';
+import { consoleLogger, isError, Logger, Result } from 'remotequery-ts-common';
 import * as fs from 'fs';
 import { processParameter } from './utils';
 import { RemoteQuery } from './remotequery';
@@ -22,7 +22,7 @@ export class RemoteQueryUtils implements IRemoteQueryUtils {
     this.saveServiceId = saveServiceId;
   }
 
-  async saveRQService(parameters: Record<string, string>, statements: string, source: string): Promise<ResultX> {
+  async saveRQService(parameters: Record<string, string>, statements: string, source: string): Promise<Result> {
     parameters.source = source;
     parameters.statements = statements;
     return this.rq.run({

@@ -15,11 +15,9 @@ import {
   RegistryObjFun,
   Request,
   Result,
-  ResultX,
   ServiceEntry,
   StatementNode,
-  toFirst,
-  toList
+  toFirst
 } from 'remotequery-ts-common';
 import { deepClone, identCommand, isEmpty, resolveValue, texting, tokenize } from './utils';
 import { processRqSqlCommand } from './rq-sql-command';
@@ -30,7 +28,7 @@ const MAX_INCLUDES = 100;
 const MAX_WHILE = 100000;
 let CONTEXT_COUNTER = 1;
 
-type StatementPreprocessor = (statements: string) => string;
+type StatementPreprocessor = (statements?: string) => string;
 
 export interface IRemoteQuery {
   addService: (serviceEntry: ServiceEntry) => void;
@@ -43,7 +41,7 @@ export interface IRemoteQuery {
 
   driver: Driver;
 
-  run: (request: Request) => Promise<ResultX>;
+  run: (request: Request) => Promise<Result>;
 
   setLogger: (logger0: Logger) => void;
   getLogger: () => Logger;
@@ -53,7 +51,7 @@ export class RemoteQuery implements IRemoteQuery {
   public driver: Driver;
   public rqCommandName = '';
 
-  private statementsPreprocessor: StatementPreprocessor = (s) => s;
+  private statementsPreprocessor: StatementPreprocessor = (s = '') => s;
   private logger = consoleLogger;
   private ignoredErrors: string[] = [];
 
@@ -112,10 +110,6 @@ export class RemoteQuery implements IRemoteQuery {
     this.commands.Node[name] = fun;
   }
 
-  public setRqCommandName(columnName: string) {
-    this.rqCommandName = columnName;
-  }
-
   public addService(serviceEntry: ServiceEntry) {
     this.directServices[serviceEntry.serviceId] = serviceEntry;
   }
@@ -164,11 +158,12 @@ export class RemoteQuery implements IRemoteQuery {
     //
     let hasAccess = false;
     const roles = request.roles || [];
-    if (serviceEntry.roles.length === 0) {
+    const serviceRoles = serviceEntry.roles || [];
+    if (serviceRoles.length === 0) {
       hasAccess = true;
     } else {
       for (const role of roles) {
-        if (serviceEntry.roles.includes(role)) {
+        if (serviceRoles.includes(role)) {
           hasAccess = true;
           break;
         }
@@ -189,14 +184,14 @@ export class RemoteQuery implements IRemoteQuery {
     //
     this.logger.info(`Service ${serviceEntry.serviceId} found for ${request.userId}`);
     context.serviceEntry = serviceEntry;
-    if (typeof serviceEntry.serviceFunction === 'function') {
-      return serviceEntry.serviceFunction({ request, context });
+    if (typeof serviceEntry.service === 'function') {
+      return serviceEntry.service({ request, context });
     }
     const statementNode = await this.prepareCommandBlock(serviceEntry, context);
     return this.processCommandBlock({ statementNode, request, currentResult: {}, serviceEntry, context });
   }
 
-  async run(request: Request, contextIn: Partial<Context> = {}): Promise<ResultX> {
+  async run(request: Request, contextIn: Partial<Context> = {}): Promise<Result> {
     const context: Context = {
       ...contextIn,
       recursion: 0,
@@ -210,14 +205,7 @@ export class RemoteQuery implements IRemoteQuery {
 
     const result = await this.runIntern(request, context);
 
-    const result2 = result || (exceptionResult('Unexpected empty result!') as Result);
-
-    return {
-      ...result,
-      list: () => toList(result2),
-      first: () => toList(result2)[0],
-      single: () => (result2.table ? result2.table[0][0] : undefined)
-    };
+    return result || exceptionResult('Empty result!');
   }
 
   buildCommandBlockTree(root: StatementNode, statementList: string[], pointer: number) {
@@ -593,7 +581,7 @@ export class RemoteQuery implements IRemoteQuery {
       } else if (typeof _error === 'object') {
         finalError = _error.toString();
       }
-      if (finalError && this.isFilteredOut(this.ignoredErrors, finalError) === false) {
+      if (finalError && !this.isFilteredOut(this.ignoredErrors, finalError)) {
         this.logger.error(finalError);
       }
     }

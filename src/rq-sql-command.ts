@@ -1,15 +1,15 @@
-import { Context, Request, Result, toList } from 'remotequery-ts-common';
+import { Context, Request, Result, SRecord, toList } from 'remotequery-ts-common';
 import { RemoteQuery } from './remotequery';
 
 type RqCommandName = 'set' | 'set-if-empty' | 'serviceId' | 'sql';
 
-interface RqCommand extends Record<string, string | undefined> {
+type RqCommand = {
   rqCommandName: RqCommandName;
   name?: string;
   serviceId?: string;
   value?: string;
   query?: string;
-}
+};
 
 export async function processRqSqlCommand(
   result: Result,
@@ -26,7 +26,7 @@ export async function processRqSqlCommand(
   let currentResult = result;
   const commands = toList<RqCommand>(result);
 
-  for (const { [rq.rqCommandName]: rqCommandName, name, value, serviceId, query = '' } of commands) {
+  for (const { rqCommandName, name, value, serviceId, query = '' } of commands) {
     switch (rqCommandName) {
       case 'set': {
         request.parameters[name || ''] = value || '';

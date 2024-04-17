@@ -45,12 +45,11 @@ export async function init(): Promise<RemoteQuery> {
   mySqlDriver.setLogger(logger1);
   await initNEXTVAL(mySqlDriver, console);
 
-  const driver: Driver = mySqlDriver;
+  const driver: Driver<any> = mySqlDriver;
 
   rq = new RemoteQuery(driver);
 
   rq.setLogger(logger);
-  rq.setRqCommandName('cmd');
 
   //
   // INIT initNEXTVAL
